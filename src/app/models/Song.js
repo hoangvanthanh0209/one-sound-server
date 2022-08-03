@@ -16,18 +16,23 @@ const songSchema = new mongoose.Schema({
     thumbnailCloudinaryId: {
         type: String,
     },
-    path: {
+    mp3: {
         type: String,
     },
-    pathCloudinaryId: {
+    mp3CloudinaryId: {
         type: String,
     },
     likeCount: {
         type: Number,
+        default: 0,
     },
     userId: {
         type: mongoose.Types.ObjectId,
         ref: 'users',
+    },
+    playlistId: {
+        type: mongoose.Types.ObjectId,
+        ref: 'playlists',
     },
 })
 
