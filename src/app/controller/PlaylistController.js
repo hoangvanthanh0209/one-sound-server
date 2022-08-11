@@ -1,138 +1,152 @@
-import moment from 'moment'
+import asyncHandler from 'express-async-handler'
+import mongoose from 'mongoose'
 
-import { playlistModel } from '../models/Playlist.js'
-import { userModel } from '../models/User.js'
-import { cloudinary } from '../../utils/cloundinary.js'
+import { Playlist } from '../models/index.js'
 
-export const getAllPlaylist = async (req, res) => {
-    try {
-        let playlists = await playlistModel.find()
-        res.status(200).json({ data: playlists })
-    } catch (err) {
-        res.status(500).json({ err })
-    }
+// define column return
+const columnPlaylistReturn = {
+    _id: 1,
+    name: 1,
+    description: 1,
+    thumbnail: 1,
+    likeCount: 1,
+    userName: '$users.name',
+    artistName: '$users.artistName',
 }
 
-export const getPlaylistByUserId = async (req, res) => {
-    try {
-        let userId = req.query.userId
-        let playlist = await playlistModel.find({ userId: userId })
-        if (!playlist.length) {
-            return res.status(200).json('No playlist')
-        }
-        return res.status(200).json({ data: playlist })
-    } catch (err) {
-        res.status(500).json({ err })
-    }
+// for lookup(): like forgein key MySQL
+const fromUser = {
+    from: 'users',
+    localField: 'user',
+    foreignField: '_id',
+    as: 'users',
 }
 
-export const getPlaylistByNameUser = async (req, res) => {
-    try {
-        let fullname = req.query.fullname
-        let playlist = await playlistModel.aggregate([
-            {
-                $lookup: {
-                    from: 'users',
-                    localField: 'userId',
-                    foreignField: '_id',
-                    as: 'user',
-                },
-            },
-        ])
-        let newPlaylist = []
+// @desc    Get playlists
+// @route   GET /api/playlists
+// @access  Public
+const getPlaylists = asyncHandler(async (req, res) => {
+    const playlists = await Playlist.aggregate().lookup(fromUser).unwind('users').project(columnPlaylistReturn)
 
-        if (fullname) {
-            newPlaylist = playlist.filter((item) => item.user[0].fullname.includes(fullname))
-        } else {
-            newPlaylist = playlist
-        }
-
-        res.status(200).json({ data: newPlaylist })
-    } catch (err) {
-        res.status(500).json({ err })
+    if (!playlists) {
+        res.status(400)
+        throw new Error('Danh sách playlist trống')
     }
-}
 
-export const getTopPlaylist = async (req, res) => {
-    try {
-        let topNumber = req.query.top
-        let playlist = await playlistModel.find().sort({ likeCount: 'desc' }).limit(topNumber)
-        res.status(200).json({ data: playlist })
-    } catch (err) {
-        res.status(500).json({ err })
+    res.status(200).json(playlists)
+})
+
+// @desc    Get playlists for page
+// @route   GET /api/playlists/query
+// @access  Public
+const getPlaylistsForPage = asyncHandler(async (req, res) => {
+    const { page = 1, limit = 8 } = req.query
+
+    const playlistCount = await Playlist.aggregate().count('count')
+    const count = playlistCount[0].count
+
+    const start = (+page - 1) * +limit
+    const end = +page * +limit > count ? count : +page * +limit
+
+    const playlists = await Playlist.aggregate()
+        .lookup(fromUser)
+        .unwind('users')
+        .project(columnPlaylistReturn)
+        .skip(start)
+        .limit(end)
+
+    if (!playlists) {
+        res.status(400)
+        throw new Error('Danh sách playlist trống')
     }
-}
 
-export const addPlaylist = async (req, res) => {
-    try {
-        let addPlaylist = req.body
-        let imagePath = req.file.path
-        let user = await userModel.findById(addPlaylist.userId)
+    res.status(200).json(playlists)
+})
 
-        const imageName = `playlist-${moment(Date.now()).format('DD-MM-YYYY-HH:mm:ss')}`
-        const options = {
-            public_id: `${user.artistNameRef}/playlist/${imageName}`,
-        }
-        let result = await cloudinary.uploader.upload(imagePath, options)
+// @desc    Get playlists by name
+// @route   GET /api/playlists/search
+// @access  Public
+const getPlaylistsByName = asyncHandler(async (req, res) => {
+    const playlists = await Playlist.aggregate()
+        .lookup(fromUser)
+        .unwind('users')
+        .match({ name: { $regex: req.query.name, $options: 'i' } })
+        .project(columnPlaylistReturn)
 
-        let playlist = new playlistModel(addPlaylist)
-        playlist.thumbnail = result?.secure_url
-        playlist.thumbnailCloudinaryId = result?.public_id
+    if (!playlists) {
+        res.status(400)
+        throw new Error('Danh sách playlist trống')
+    }
 
+    res.status(200).json(playlists)
+})
+
+// @desc    Get top playlists
+// @route   GET /api/playlists/top
+// @access  Public
+const getTopPlaylistsFavourite = asyncHandler(async (req, res) => {
+    const top = req.query.top || process.env.TOP_PLAYLIST
+
+    const playlists = await Playlist.aggregate()
+        .lookup(fromUser)
+        .unwind('users')
+        .project(columnPlaylistReturn)
+        .sort({ likeCount: 'desc' })
+        .limit(+top)
+
+    if (!playlists) {
+        res.status(400)
+        throw new Error('Danh sách playlist trống')
+    }
+
+    res.status(200).json(playlists)
+})
+
+// @desc    Get playlist by id
+// @route   GET /api/playlists/:id
+// @access  Public
+const getPlaylistById = asyncHandler(async (req, res) => {
+    // .match() need same type column
+    const objectId = mongoose.Types.ObjectId
+
+    const playlists = await Playlist.aggregate()
+        .lookup(fromUser)
+        .unwind('users')
+        .match({ _id: new objectId(req.params.id) })
+        .project(columnPlaylistReturn)
+
+    // aggregate return array
+    const playlist = playlists[0]
+
+    if (!playlist) {
+        res.status(400)
+        throw new Error('Thông tin không hợp lệ')
+    }
+
+    res.status(200).json(playlist)
+})
+
+// @desc    Like playlist
+// @route   PUT /api/playlists/like/:id
+// @access  Public
+const likePlaylist = asyncHandler(async (req, res) => {
+    const playlist = await Playlist.findById(req.params.id)
+
+    if (playlist) {
+        playlist.likeCount = playlist.likeCount + 1
         await playlist.save()
-
         res.status(200).json(playlist)
-    } catch (err) {
-        res.status(500).json({ err })
+    } else {
+        res.status(400)
+        throw new Error('Thông tin không hợp lệ')
     }
-}
+})
 
-export const updatePlaylist = async (req, res) => {
-    try {
-        let playlistId = req.query.playlistId
-
-        let playlist = await playlistModel.findById(playlistId)
-
-        if (playlist) {
-            let updatePlaylist = req.body
-            let imagePath = req.file.path
-            let result
-
-            let user = await userModel.findById(playlist.userId)
-
-            await cloudinary.uploader.destroy(playlist.thumbnailCloudinaryId)
-
-            const imageName = `playlist-${moment(Date.now()).format('DD-MM-YYYY-HH:mm:ss')}`
-            const options = {
-                public_id: `${user.artistNameRef}/playlist/${imageName}`,
-            }
-
-            result = await cloudinary.uploader.upload(imagePath, options)
-
-            updatePlaylist.thumbnail = result?.secure_url
-            updatePlaylist.thumbnailCloudinaryId = result?.public_id
-
-            let newPlaylist = await playlistModel.findByIdAndUpdate({ _id: playlist._id }, updatePlaylist, {
-                new: true,
-            })
-
-            res.status(200).json(newPlaylist)
-        }
-    } catch (err) {
-        res.status(500).json({ err })
-    }
-}
-
-export const deletePlaylist = async (req, res) => {
-    try {
-        let playlistId = req.query.playlistId
-        let playlist = await playlistModel.findById(playlistId)
-        if (playlist) {
-            await cloudinary.uploader.destroy(playlist.thumbnailCloudinaryId)
-            await playlist.remove()
-        }
-        res.status(200).json(playlist)
-    } catch (err) {
-        res.status(500).json({ err })
-    }
+export {
+    getPlaylists,
+    getPlaylistsForPage,
+    getPlaylistsByName,
+    getTopPlaylistsFavourite,
+    getPlaylistById,
+    likePlaylist,
 }

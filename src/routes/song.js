@@ -1,18 +1,21 @@
 import express from 'express'
-import { addSong, deleteSong, getSongByPlaylistId, updateSong } from '../app/controller/SongController.js'
-import { upload } from '../utils/multer.js'
+import {
+    getSongList,
+    getSongsForPage,
+    getSongByName,
+    getTopSongFavourite,
+    getSongById,
+    likeSong,
+} from '../app/controller/songController.js'
 
 const router = express.Router()
 
-const cpUpload = upload.fields([
-    { name: 'thumbnail', maxCount: 1 },
-    { name: 'mp3', maxCount: 1 },
-])
-
 // [api/songs]
-router.get('/query-playlist', getSongByPlaylistId)
-router.post('/add', cpUpload, addSong)
-router.put('/update', cpUpload, updateSong)
-router.delete('delete', deleteSong)
+router.get('/', getSongList)
+router.get('/query', getSongsForPage)
+router.get('/search', getSongByName)
+router.get('/top', getTopSongFavourite)
+router.get('/:id', getSongById)
+router.put('/like/:id', likeSong)
 
 export default router
