@@ -18,16 +18,20 @@ const slugifyOptions = {
     trim: true,
 }
 
+const slugifyOptionsSearch = {
+    replacement: ' ',
+    remove: undefined,
+    lower: true,
+    strict: false,
+    locale: 'vi',
+    trim: true,
+}
+
 // @desc    Get user list
 // @route   GET /api/users
 // @access  Private (admin)
 const getUserList = asyncHandler(async (req, res) => {
     const userList = await User.find().select(process.env.USER_INFO_ADMIN).sort({ role: 'asc', name: 'desc' })
-
-    if (!userList) {
-        res.status(400)
-        throw new Error('Danh sách thành viên trống')
-    }
 
     res.status(200).json(userList)
 })
@@ -38,8 +42,7 @@ const getUserList = asyncHandler(async (req, res) => {
 const getUsers = asyncHandler(async (req, res) => {
     const { page = 1, limit = 8 } = req.query
 
-    const userCount = await User.aggregate().count('count')
-    const count = userCount[0].count
+    const count = await User.find({ role: process.env.USER_ROLE }).count()
 
     const start = (+page - 1) * +limit
     const end = +page * +limit > count ? count : +page * +limit
@@ -49,11 +52,6 @@ const getUsers = asyncHandler(async (req, res) => {
         .skip(start)
         .limit(end)
 
-    if (!userList) {
-        res.status(400)
-        throw new Error('Danh sách nghệ sĩ trống')
-    }
-
     res.status(200).json(userList)
 })
 
@@ -62,14 +60,9 @@ const getUsers = asyncHandler(async (req, res) => {
 // @access  Public
 const getUserByName = asyncHandler(async (req, res) => {
     const userList = await User.find({
-        name: { $regex: req.query.name, $options: 'i' },
+        search: { $regex: req.query.name, $options: 'i' },
         role: process.env.USER_ROLE,
     }).select(process.env.USER_INFO)
-
-    if (!userList) {
-        res.status(400)
-        throw new Error('Danh sách nghệ sĩ trống')
-    }
 
     res.status(200).json(userList)
 })
@@ -78,17 +71,13 @@ const getUserByName = asyncHandler(async (req, res) => {
 // @route   GET /api/users/top
 // @access  Public
 const getTopUsersFavourite = asyncHandler(async (req, res) => {
-    const top = req.query.top || process.env.TOP_USER
+    // const top = req.query.top || process.env.TOP_USER
+    const top = Number.parseInt(req.query.top) || null
 
     const users = await User.find({ role: process.env.USER_ROLE })
         .select(process.env.USER_INFO)
         .sort({ likeCount: 'desc' })
-        .limit(+top)
-
-    if (!users) {
-        res.status(400)
-        throw new Error('Danh sách nghệ sĩ trống')
-    }
+        .limit(top)
 
     res.status(200).json(users)
 })
@@ -139,23 +128,25 @@ const resgiter = asyncHandler(async (req, res) => {
 
     const user = await User.create({
         name,
-        slug: `${slugtify(name, { slugifyOptions })}-${count}`,
+        slug: `${slugtify(name, slugifyOptions)}-${count}`,
         artistName,
-        artistNameRef: artistName,
+        artistNameRef: slugtify(artistName, slugifyOptions),
         description,
-        avatar: image?.secure_url || process.env.AVATAR_DEFAULT,
+        avatar: image?.secure_url,
         avatarCloudinaryId: image?.public_id,
         username,
         password: hash,
+        search: slugtify(name, slugifyOptionsSearch),
     })
 
     if (user) {
         res.status(201).json({
-            _id: user.id,
+            id: user._id,
             name: user.name,
             slug: user.slug,
             artistName: user.artistName,
             avatar: user.avatar,
+            description: user.description,
             likeCount: user.likeCount,
             token: generateToken(user._id),
         })
@@ -171,22 +162,28 @@ const resgiter = asyncHandler(async (req, res) => {
 const login = asyncHandler(async (req, res) => {
     const { username, password } = req.body
 
+    if (!username || !password) {
+        res.status(400)
+        throw new Error('Vui lòng nhập đầy đủ các trường')
+    }
+
     // check user for username
     const user = await User.findOne({ username })
 
     if (user && (await bcrypt.compare(password, user.password))) {
         res.status(200).json({
-            _id: user.id,
+            id: user._id,
             name: user.name,
             slug: user.slug,
             artistName: user.artistName,
             avatar: user.avatar,
+            description: user.description,
             likeCount: user.likeCount,
             token: generateToken(user._id),
         })
     } else {
         res.status(400)
-        throw new Error('Thông tin không hợp lệ')
+        throw new Error('Tài khoản hoặc mật khẩu không đúng')
     }
 })
 
@@ -203,8 +200,8 @@ const resetPassword = asyncHandler(async (req, res) => {
 
         user.password = hash
 
-        const updatedUser = await User.findByIdAndUpdate(req.params.id, user, { new: true })
-        res.status(200).json(updatedUser)
+        await User.findByIdAndUpdate(req.params.id, user)
+        res.status(200).json('Đặt lại mật khẩu thành công')
     } else {
         res.status(400)
         throw new Error('Người dùng không tồn tại')
@@ -220,7 +217,7 @@ const toggleRole = asyncHandler(async (req, res) => {
     if (user) {
         user.role = user.role === process.env.ADMIN_ROLE ? process.env.USER_ROLE : process.env.ADMIN_ROLE
         await user.save()
-        res.status(200).json(user)
+        res.status(200).json({ id: user._id, role: user.role })
     } else {
         res.status(400)
         throw new Error('Người dùng không tồn tại')
@@ -237,7 +234,7 @@ const toggleStatus = asyncHandler(async (req, res) => {
         user.status =
             user.status === process.env.STATUS_ACTIVE ? process.env.STATUS_INACTIVE : process.env.STATUS_ACTIVE
         await user.save()
-        res.status(200).json(user)
+        res.status(200).json({ id: user._id, status: user.status })
     } else {
         res.status(400)
         throw new Error('Người dùng không tồn tại')
@@ -248,12 +245,12 @@ const toggleStatus = asyncHandler(async (req, res) => {
 // @route   PUT /api/users/like/:id
 // @access  Private (user)
 const likeUser = asyncHandler(async (req, res) => {
-    const user = await User.findById(req.params.id).select(process.env.USER_INFO)
+    const user = await User.findById(req.params.id)
 
     if (user) {
         user.likeCount = user.likeCount + 1
         await user.save()
-        res.status(200).json(user)
+        res.status(200).json({ id: user._id, likeCount: user.likeCount })
     } else {
         res.status(400)
         throw new Error('Nghệ sĩ không tồn tại')

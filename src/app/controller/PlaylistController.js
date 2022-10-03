@@ -3,35 +3,90 @@ import mongoose from 'mongoose'
 
 import { Playlist } from '../models/index.js'
 
-// define column return
-const columnPlaylistReturn = {
-    _id: 1,
-    name: 1,
-    description: 1,
-    thumbnail: 1,
-    likeCount: 1,
-    userName: '$users.name',
-    artistName: '$users.artistName',
-}
+const unwindCategory = 'categoryData'
+const unwindSong = 'songData'
+const unwindUser = 'userData'
 
 // for lookup(): like forgein key MySQL
-const fromUser = {
+const lookupUser = {
     from: 'users',
-    localField: 'user',
+    localField: 'userId',
     foreignField: '_id',
-    as: 'users',
+    as: unwindUser,
 }
+const lookupPlaylistToCategory = {
+    from: 'categories',
+    localField: 'categoryId',
+    foreignField: '_id',
+    as: unwindCategory,
+}
+const lookupPlaylistToSong = {
+    from: 'songs',
+    localField: '_id',
+    foreignField: 'playlistId',
+    as: unwindSong,
+}
+const lookupPlaylistToUser = {
+    from: 'users',
+    localField: 'userId',
+    foreignField: '_id',
+    as: unwindUser,
+}
+
+// define column return
+const columnPlaylistReturn = {
+    _id: 0,
+    id: '$_id',
+    name: '$name',
+    slug: '$slug',
+    description: '$description',
+    thumbnail: '$thumbnail',
+    likeCount: '$likeCount',
+    userId: '$userId',
+    artistName: `$${unwindUser}.artistName`,
+    userSlug: `$${unwindUser}.slug`,
+    countSong: { $size: `$${unwindSong}` },
+}
+
+const objectId = mongoose.Types.ObjectId
 
 // @desc    Get playlists
 // @route   GET /api/playlists
 // @access  Public
 const getPlaylists = asyncHandler(async (req, res) => {
-    const playlists = await Playlist.aggregate().lookup(fromUser).unwind('users').project(columnPlaylistReturn)
-
-    if (!playlists) {
-        res.status(400)
-        throw new Error('Danh sách playlist trống')
-    }
+    // const playlists = await Playlist.aggregate().lookup(lookupUser).unwind(unwindUser).project(columnPlaylistReturn)
+    const playlists = await Playlist.aggregate()
+        .lookup(lookupPlaylistToCategory)
+        .lookup(lookupPlaylistToSong)
+        .lookup(lookupPlaylistToUser)
+        .unwind(unwindCategory)
+        .unwind(unwindUser)
+        .group({
+            _id: `$${unwindCategory}`,
+            data: {
+                $push: {
+                    id: '$_id',
+                    name: '$name',
+                    slug: '$slug',
+                    categoryId: '$categoryId',
+                    description: '$description',
+                    thumbnail: '$thumbnail',
+                    likeCount: '$likeCount',
+                    createdAt: '$createdAt',
+                    countSong: { $size: `$${unwindSong}` },
+                    userId: '$userId',
+                    artistName: `$${unwindUser}.artistName`,
+                },
+            },
+        })
+        .project({
+            _id: 0,
+            categoryId: '$_id._id',
+            categoryName: '$_id.name',
+            count: { $size: '$data' },
+            data: '$data',
+        })
+        .sort({ categoryName: 'asc' })
 
     res.status(200).json(playlists)
 })
@@ -42,23 +97,17 @@ const getPlaylists = asyncHandler(async (req, res) => {
 const getPlaylistsForPage = asyncHandler(async (req, res) => {
     const { page = 1, limit = 8 } = req.query
 
-    const playlistCount = await Playlist.aggregate().count('count')
-    const count = playlistCount[0].count
+    const count = await Playlist.find().count()
 
     const start = (+page - 1) * +limit
     const end = +page * +limit > count ? count : +page * +limit
 
     const playlists = await Playlist.aggregate()
-        .lookup(fromUser)
-        .unwind('users')
+        .lookup(lookupUser)
+        .unwind(unwindUser)
         .project(columnPlaylistReturn)
         .skip(start)
         .limit(end)
-
-    if (!playlists) {
-        res.status(400)
-        throw new Error('Danh sách playlist trống')
-    }
 
     res.status(200).json(playlists)
 })
@@ -68,15 +117,11 @@ const getPlaylistsForPage = asyncHandler(async (req, res) => {
 // @access  Public
 const getPlaylistsByName = asyncHandler(async (req, res) => {
     const playlists = await Playlist.aggregate()
-        .lookup(fromUser)
-        .unwind('users')
-        .match({ name: { $regex: req.query.name, $options: 'i' } })
+        .lookup(lookupPlaylistToSong)
+        .lookup(lookupPlaylistToUser)
+        .unwind(unwindUser)
+        .match({ search: { $regex: req.query.name, $options: 'i' } })
         .project(columnPlaylistReturn)
-
-    if (!playlists) {
-        res.status(400)
-        throw new Error('Danh sách playlist trống')
-    }
 
     res.status(200).json(playlists)
 })
@@ -85,19 +130,41 @@ const getPlaylistsByName = asyncHandler(async (req, res) => {
 // @route   GET /api/playlists/top
 // @access  Public
 const getTopPlaylistsFavourite = asyncHandler(async (req, res) => {
-    const top = req.query.top || process.env.TOP_PLAYLIST
+    // const top = req.query.top || process.env.TOP_PLAYLIST
+    const top = Number.parseInt(req.query.top) || null
 
     const playlists = await Playlist.aggregate()
-        .lookup(fromUser)
-        .unwind('users')
+        .lookup(lookupPlaylistToUser)
+        .lookup(lookupPlaylistToSong)
+        .unwind(unwindUser)
         .project(columnPlaylistReturn)
         .sort({ likeCount: 'desc' })
-        .limit(+top)
+        .limit(top)
 
-    if (!playlists) {
-        res.status(400)
-        throw new Error('Danh sách playlist trống')
-    }
+    res.status(200).json(playlists)
+})
+
+// @desc    Get playlists by userId
+// @route   GET /api/playlists/getByUser?userId=x
+// @access  Public
+const getByUserId = asyncHandler(async (req, res) => {
+    let playlists
+    await Playlist.aggregate()
+        .lookup(lookupPlaylistToUser)
+        .lookup(lookupPlaylistToSong)
+        .unwind(unwindUser)
+        .match({ userId: new objectId(req.query.userId) })
+        .sort({ likeCount: 'desc', createdAt: 'desc' })
+        .project(columnPlaylistReturn)
+        .exec()
+        .then((data) => {
+            playlists = data
+        })
+        .catch((e) => {
+            console.log(e)
+            res.status(400)
+            throw new Error('Playlist không tồn tại')
+        })
 
     res.status(200).json(playlists)
 })
@@ -106,22 +173,22 @@ const getTopPlaylistsFavourite = asyncHandler(async (req, res) => {
 // @route   GET /api/playlists/:id
 // @access  Public
 const getPlaylistById = asyncHandler(async (req, res) => {
-    // .match() need same type column
-    const objectId = mongoose.Types.ObjectId
-
-    const playlists = await Playlist.aggregate()
-        .lookup(fromUser)
-        .unwind('users')
+    let playlist
+    await Playlist.aggregate()
+        .lookup(lookupPlaylistToUser)
+        .lookup(lookupPlaylistToSong)
+        .unwind(unwindUser)
         .match({ _id: new objectId(req.params.id) })
         .project(columnPlaylistReturn)
-
-    // aggregate return array
-    const playlist = playlists[0]
-
-    if (!playlist) {
-        res.status(400)
-        throw new Error('Thông tin không hợp lệ')
-    }
+        .exec()
+        .then((data) => {
+            playlist = data[0]
+        })
+        .catch((e) => {
+            console.log(e)
+            res.status(400)
+            throw new Error('Playlist không tồn tại')
+        })
 
     res.status(200).json(playlist)
 })
@@ -135,7 +202,7 @@ const likePlaylist = asyncHandler(async (req, res) => {
     if (playlist) {
         playlist.likeCount = playlist.likeCount + 1
         await playlist.save()
-        res.status(200).json(playlist)
+        res.status(200).json({ categoryId: playlist.categoryId, id: playlist._id, likeCount: playlist.likeCount })
     } else {
         res.status(400)
         throw new Error('Thông tin không hợp lệ')
@@ -147,6 +214,7 @@ export {
     getPlaylistsForPage,
     getPlaylistsByName,
     getTopPlaylistsFavourite,
+    getByUserId,
     getPlaylistById,
     likePlaylist,
 }

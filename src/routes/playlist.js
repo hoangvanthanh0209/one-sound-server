@@ -7,6 +7,7 @@ import {
     getTopPlaylistsFavourite,
     getPlaylistById,
     likePlaylist,
+    getByUserId,
 } from '../app/controller/PlaylistController.js'
 
 const router = express.Router()
@@ -16,6 +17,7 @@ router.get('/', getPlaylists)
 router.get('/query', getPlaylistsForPage)
 router.get('/search', getPlaylistsByName)
 router.get('/top', getTopPlaylistsFavourite)
+router.get('/getByUser', getByUserId)
 router.get('/:id', getPlaylistById)
 router.put('/like/:id', likePlaylist)
 

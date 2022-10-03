@@ -11,7 +11,6 @@ const playlistSchema = new mongoose.Schema(
         },
         description: {
             type: String,
-            default: '',
         },
         thumbnail: {
             type: String,
@@ -23,16 +22,38 @@ const playlistSchema = new mongoose.Schema(
             type: Number,
             default: 0,
         },
-        user: {
+        search: {
+            type: String,
+        },
+        userId: {
             type: mongoose.Schema.Types.ObjectId,
             required: true,
             ref: 'User',
+        },
+        categoryId: {
+            type: mongoose.Schema.Types.ObjectId,
+            required: true,
+            ref: 'Category',
         },
     },
     {
         timestamps: true,
     },
 )
+
+// Duplicate the ID field.
+playlistSchema.virtual('id').get(function () {
+    return this._id.toHexString()
+})
+
+// Ensure virtual fields are serialised.
+playlistSchema.set('toJSON', {
+    virtuals: true,
+    versionKey: false,
+    transform: function (doc, ret) {
+        delete ret._id
+    },
+})
 
 const Playlist = mongoose.model('Playlist', playlistSchema)
 

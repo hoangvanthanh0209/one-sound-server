@@ -45,11 +45,28 @@ const userSchema = new mongoose.Schema(
             type: String,
             default: 'user',
         },
+        search: {
+            type: String,
+        },
     },
     {
         timestamps: true,
     },
 )
+
+// Duplicate the ID field.
+userSchema.virtual('id').get(function () {
+    return this._id.toHexString()
+})
+
+// Ensure virtual fields are serialised.
+userSchema.set('toJSON', {
+    virtuals: true,
+    versionKey: false,
+    transform: function (doc, ret) {
+        delete ret._id
+    },
+})
 
 const User = mongoose.model('User', userSchema)
 

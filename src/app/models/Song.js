@@ -1,4 +1,6 @@
 import mongoose from 'mongoose'
+// import pkg from 'mongoose'
+// const { Schema } = pkg
 
 const songSchema = new mongoose.Schema(
     {
@@ -31,12 +33,15 @@ const songSchema = new mongoose.Schema(
             type: Number,
             default: 0,
         },
-        user: {
+        search: {
+            type: String,
+        },
+        userId: {
             type: mongoose.Types.ObjectId,
             require: true,
             ref: 'User',
         },
-        playlist: {
+        playlistId: {
             type: mongoose.Types.ObjectId,
             require: true,
             ref: 'Playlist',
@@ -46,6 +51,20 @@ const songSchema = new mongoose.Schema(
         timestamps: true,
     },
 )
+
+// Duplicate the ID field.
+songSchema.virtual('id').get(function () {
+    return this._id.toHexString()
+})
+
+// Ensure virtual fields are serialised.
+songSchema.set('toJSON', {
+    virtuals: true,
+    versionKey: false,
+    transform: function (doc, ret) {
+        delete ret._id
+    },
+})
 
 const Song = mongoose.model('Song', songSchema)
 

@@ -6,6 +6,9 @@ import {
     getTopSongFavourite,
     getSongById,
     likeSong,
+    getSongByPlaylistId,
+    getSongAndPlaylistInfo,
+    getPopularSongByUserId,
 } from '../app/controller/songController.js'
 
 const router = express.Router()
@@ -15,6 +18,9 @@ router.get('/', getSongList)
 router.get('/query', getSongsForPage)
 router.get('/search', getSongByName)
 router.get('/top', getTopSongFavourite)
+router.get('/getSong', getSongByPlaylistId)
+router.get('/getSongAndPlaylistInfo', getSongAndPlaylistInfo)
+router.get('/getPopularSongByUserId', getPopularSongByUserId)
 router.get('/:id', getSongById)
 router.put('/like/:id', likeSong)
 
