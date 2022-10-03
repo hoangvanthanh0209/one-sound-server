@@ -12,7 +12,7 @@ import {
     toggleStatus,
     likeUser,
     deleteUser,
-} from '../app/controller/userController.js'
+} from '../../src/app/controller/userController.js'
 import upload from '../utils/multer.js'
 import auth from '../middleware/authMiddleware.js'
 
