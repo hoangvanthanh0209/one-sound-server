@@ -7,8 +7,10 @@ import routes from './routes/index.js'
 import { connectDB } from './config/db.js'
 import errorHandler from './middleware/errorMiddleware.js'
 
-const app = express()
 dotenv.config()
+
+const app = express()
+const PORT = process.env.PORT || 5000
 
 app.use(bodyParser.json({ limit: '30mb' }))
 app.use(bodyParser.urlencoded({ extended: true, limit: '30mb' }))
@@ -23,6 +25,6 @@ connectDB()
 // error middleware
 app.use(errorHandler)
 
-app.listen(process.env.PORT, () => {
-    console.log(`Server is running on port ${process.env.PORT}`)
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`)
 })
