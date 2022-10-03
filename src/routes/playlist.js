@@ -8,7 +8,7 @@ import {
     getPlaylistById,
     likePlaylist,
     getByUserId,
-} from '../app/controller/PlaylistController.js'
+} from '../controller/PlaylistController.js'
 
 const router = express.Router()
 

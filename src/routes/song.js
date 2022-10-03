@@ -9,7 +9,7 @@ import {
     getSongByPlaylistId,
     getSongAndPlaylistInfo,
     getPopularSongByUserId,
-} from '../app/controller/songController.js'
+} from '../controller/songController.js'
 
 const router = express.Router()
 

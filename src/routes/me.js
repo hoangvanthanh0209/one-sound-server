@@ -16,7 +16,7 @@ import {
     deleteSong,
     updatePassword,
     getPlaylistOfMe,
-} from '../app/controller/meController.js'
+} from '../controller/meController.js'
 
 const router = express.Router()
 
