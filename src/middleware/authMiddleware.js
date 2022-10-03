@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken'
 import asyncHandler from 'express-async-handler'
 import dotenv from 'dotenv'
 
-import { User } from '../app/models/index.js'
+import { User } from '../models/index.js'
 
 dotenv.config()
 

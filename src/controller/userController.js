@@ -5,7 +5,7 @@ import asyncHandler from 'express-async-handler'
 import slugtify from 'slugify'
 
 import { User } from '../models/index.js'
-import { uploadImage } from '../../utils/cloundinary.js'
+import { uploadImage } from '../utils/cloundinary.js'
 
 dotenv.config()
 

@@ -7,7 +7,7 @@ import mongoose from 'mongoose'
 import jwt from 'jsonwebtoken'
 
 import { User, Playlist, Song, Category } from '../models/index.js'
-import { uploadImage, deleteImage, uploadMp3, deleteMp3 } from '../../utils/cloundinary.js'
+import { uploadImage, deleteImage, uploadMp3, deleteMp3 } from '../utils/cloundinary.js'
 
 dotenv.config()
 
