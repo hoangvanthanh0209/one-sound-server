@@ -10,4 +10,13 @@ const getCategories = asyncHandler(async (req, res) => {
     res.status(200).json(categories)
 })
 
-export { getCategories }
+// @desc    Get categoriescategories
+// @route   GET /api/categories
+// @access  Public
+const getCategoryById = asyncHandler(async (req, res) => {
+    const category = await Category.findOne({ _id: req.params.categoryId })
+
+    res.status(200).json(category)
+})
+
+export { getCategories, getCategoryById }
