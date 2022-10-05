@@ -169,6 +169,66 @@ const getByUserId = asyncHandler(async (req, res) => {
     res.status(200).json(playlists)
 })
 
+// @desc    Get playlists
+// @route   GET /api/playlists/getByCategory?categoryId=x&page=x&limit=x
+// @access  Public
+const getPlaylistsByCategoryId = asyncHandler(async (req, res) => {
+    const { categoryId, page = 1, limit = 16 } = req.query
+
+    const count = await Playlist.find().count()
+
+    const start = (+page - 1) * +limit
+    const end = +page * +limit > count ? count : +page * +limit
+
+    let playlists
+    await Playlist.aggregate()
+        .lookup(lookupPlaylistToCategory)
+        .lookup(lookupPlaylistToSong)
+        .lookup(lookupPlaylistToUser)
+        .unwind(unwindCategory)
+        .unwind(unwindUser)
+        .match({ categoryId: new objectId(categoryId) })
+        .skip(start)
+        .limit(end)
+        .group({
+            _id: `$${unwindCategory}`,
+            data: {
+                $push: {
+                    id: '$_id',
+                    name: '$name',
+                    slug: '$slug',
+                    categoryId: '$categoryId',
+                    description: '$description',
+                    thumbnail: '$thumbnail',
+                    likeCount: '$likeCount',
+                    createdAt: '$createdAt',
+                    countSong: { $size: `$${unwindSong}` },
+                    userId: '$userId',
+                    artistName: `$${unwindUser}.artistName`,
+                },
+            },
+        })
+        .project({
+            _id: 0,
+            categoryId: '$_id._id',
+            categoryName: '$_id.name',
+            categorySlug: '$_id.slug',
+            count: { $size: '$data' },
+            data: '$data',
+        })
+        .sort({ categoryName: 'asc' })
+        .exec()
+        .then((data) => {
+            playlists = data[0]
+        })
+        .catch((error) => {
+            console.log(error)
+            throw new Error('Thể loại này không tồn tại')
+        })
+
+    res.status(200).json(playlists)
+})
+
 // @desc    Get playlist by id
 // @route   GET /api/playlists/:id
 // @access  Public
@@ -215,6 +275,7 @@ export {
     getPlaylistsByName,
     getTopPlaylistsFavourite,
     getByUserId,
+    getPlaylistsByCategoryId,
     getPlaylistById,
     likePlaylist,
 }

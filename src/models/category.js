@@ -6,6 +6,9 @@ const categorySchema = new mongoose.Schema(
             type: String,
             required: [true, 'Please add a name value'],
         },
+        slug: {
+            type: String,
+        },
     },
     {
         timestamps: true,
