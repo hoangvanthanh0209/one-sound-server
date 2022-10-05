@@ -83,6 +83,7 @@ const getPlaylists = asyncHandler(async (req, res) => {
             _id: 0,
             categoryId: '$_id._id',
             categoryName: '$_id.name',
+            categorySlug: '$_id.slug',
             count: { $size: '$data' },
             data: '$data',
         })
