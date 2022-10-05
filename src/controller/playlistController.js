@@ -184,7 +184,7 @@ const getPlaylistsByCategoryId = asyncHandler(async (req, res) => {
         }).count()
 
         const start = (+page - 1) * +limit
-        const end = +page * +limit > count ? count : +page * +limit
+        // const end = +page * +limit > count ? count : +page * +limit
 
         const pagination = {
             page: +page,
@@ -201,7 +201,7 @@ const getPlaylistsByCategoryId = asyncHandler(async (req, res) => {
             .unwind(unwindUser)
             .match({ categoryId: new objectId(categoryId), search: { $regex: name, $options: 'i' } })
             .skip(start)
-            .limit(end)
+            .limit(+limit)
             .group({
                 _id: `$${unwindCategory}`,
                 data: {
@@ -242,7 +242,7 @@ const getPlaylistsByCategoryId = asyncHandler(async (req, res) => {
         const count = await Playlist.find({ categoryId: new objectId(categoryId) }).count()
 
         const start = (+page - 1) * +limit
-        const end = +page * +limit > count ? count : +page * +limit
+        // const end = +page * +limit > count ? +page * +limit : count
 
         const pagination = {
             page: +page,
@@ -259,7 +259,7 @@ const getPlaylistsByCategoryId = asyncHandler(async (req, res) => {
             .unwind(unwindUser)
             .match({ categoryId: new objectId(categoryId) })
             .skip(start)
-            .limit(end)
+            .limit(+limit)
             .group({
                 _id: `$${unwindCategory}`,
                 data: {
