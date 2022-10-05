@@ -176,13 +176,23 @@ const getByUserId = asyncHandler(async (req, res) => {
 const getPlaylistsByCategoryId = asyncHandler(async (req, res) => {
     const { categoryId, page = 1, limit = 16, name } = req.query
 
-    const count = await Playlist.find().count()
-
-    const start = (+page - 1) * +limit
-    const end = +page * +limit > count ? count : +page * +limit
-
     let playlists
     if (name) {
+        const count = await Playlist.find({
+            categoryId: new objectId(categoryId),
+            search: { $regex: name, $options: 'i' },
+        }).count()
+
+        const start = (+page - 1) * +limit
+        const end = +page * +limit > count ? count : +page * +limit
+
+        const pagination = {
+            page: +page,
+            limit: +limit,
+            totalRows: count,
+            totalPages: Math.ceil(count / limit),
+        }
+
         await Playlist.aggregate()
             .lookup(lookupPlaylistToCategory)
             .lookup(lookupPlaylistToSong)
@@ -216,15 +226,10 @@ const getPlaylistsByCategoryId = asyncHandler(async (req, res) => {
                 categoryName: '$_id.name',
                 categorySlug: '$_id.slug',
                 count: { $size: '$data' },
-                pagination: {
-                    page,
-                    limit,
-                    totalRows: count,
-                    totalPages: Math.floor(count / limit),
-                },
                 data: '$data',
             })
             .sort({ categoryName: 'asc' })
+            .addFields({ pagination })
             .exec()
             .then((data) => {
                 playlists = data[0]
@@ -234,6 +239,18 @@ const getPlaylistsByCategoryId = asyncHandler(async (req, res) => {
                 throw new Error('Thể loại này không tồn tại')
             })
     } else {
+        const count = await Playlist.find({ categoryId: new objectId(categoryId) }).count()
+
+        const start = (+page - 1) * +limit
+        const end = +page * +limit > count ? count : +page * +limit
+
+        const pagination = {
+            page: +page,
+            limit: +limit,
+            totalRows: count,
+            totalPages: Math.ceil(count / limit),
+        }
+
         await Playlist.aggregate()
             .lookup(lookupPlaylistToCategory)
             .lookup(lookupPlaylistToSong)
@@ -267,15 +284,10 @@ const getPlaylistsByCategoryId = asyncHandler(async (req, res) => {
                 categoryName: '$_id.name',
                 categorySlug: '$_id.slug',
                 count: { $size: '$data' },
-                pagination: {
-                    page,
-                    limit,
-                    totalRows: count,
-                    totalPages: Math.floor(count / limit),
-                },
                 data: '$data',
             })
             .sort({ categoryName: 'asc' })
+            .addFields({ pagination })
             .exec()
             .then((data) => {
                 playlists = data[0]
