@@ -216,6 +216,12 @@ const getPlaylistsByCategoryId = asyncHandler(async (req, res) => {
                 categoryName: '$_id.name',
                 categorySlug: '$_id.slug',
                 count: { $size: '$data' },
+                pagination: {
+                    page,
+                    limit,
+                    totalRows: count,
+                    totalPages: Math.floor(count / limit),
+                },
                 data: '$data',
             })
             .sort({ categoryName: 'asc' })
@@ -261,6 +267,12 @@ const getPlaylistsByCategoryId = asyncHandler(async (req, res) => {
                 categoryName: '$_id.name',
                 categorySlug: '$_id.slug',
                 count: { $size: '$data' },
+                pagination: {
+                    page,
+                    limit,
+                    totalRows: count,
+                    totalPages: Math.floor(count / limit),
+                },
                 data: '$data',
             })
             .sort({ categoryName: 'asc' })
