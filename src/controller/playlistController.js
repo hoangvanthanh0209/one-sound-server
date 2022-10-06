@@ -232,7 +232,7 @@ const getPlaylistsByCategoryId = asyncHandler(async (req, res) => {
             .addFields({ pagination })
             .exec()
             .then((data) => {
-                playlists = data
+                playlists = data[0]
             })
             .catch((error) => {
                 console.log(error)
@@ -290,7 +290,7 @@ const getPlaylistsByCategoryId = asyncHandler(async (req, res) => {
             .addFields({ pagination })
             .exec()
             .then((data) => {
-                playlists = data
+                playlists = data[0]
             })
             .catch((error) => {
                 console.log(error)
