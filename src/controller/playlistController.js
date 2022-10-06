@@ -55,7 +55,8 @@ const objectId = mongoose.Types.ObjectId
 // @access  Public
 const getPlaylists = asyncHandler(async (req, res) => {
     // const playlists = await Playlist.aggregate().lookup(lookupUser).unwind(unwindUser).project(columnPlaylistReturn)
-    const playlists = await Playlist.aggregate()
+    let playlists
+    await Playlist.aggregate()
         .lookup(lookupPlaylistToCategory)
         .lookup(lookupPlaylistToSong)
         .lookup(lookupPlaylistToUser)
@@ -65,18 +66,37 @@ const getPlaylists = asyncHandler(async (req, res) => {
             _id: `$${unwindCategory}`,
             data: {
                 $push: {
-                    id: '$_id',
-                    name: '$name',
-                    slug: '$slug',
-                    categoryId: '$categoryId',
-                    description: '$description',
-                    thumbnail: '$thumbnail',
-                    likeCount: '$likeCount',
-                    createdAt: '$createdAt',
-                    countSong: { $size: `$${unwindSong}` },
-                    userId: '$userId',
-                    artistName: `$${unwindUser}.artistName`,
+                    $cond: [
+                        { $gt: [{ $size: `$${unwindSong}` }, 0] },
+                        {
+                            id: '$_id',
+                            name: '$name',
+                            slug: '$slug',
+                            categoryId: '$categoryId',
+                            description: '$description',
+                            thumbnail: '$thumbnail',
+                            likeCount: '$likeCount',
+                            createdAt: '$createdAt',
+                            countSong: { $size: `$${unwindSong}` },
+                            userId: '$userId',
+                            artistName: `$${unwindUser}.artistName`,
+                        },
+                        '$$REMOVE',
+                    ],
                 },
+                // $push: {
+                //     id: '$_id',
+                //     name: '$name',
+                //     slug: '$slug',
+                //     categoryId: '$categoryId',
+                //     description: '$description',
+                //     thumbnail: '$thumbnail',
+                //     likeCount: '$likeCount',
+                //     createdAt: '$createdAt',
+                //     countSong: { $size: `$${unwindSong}` },
+                //     userId: '$userId',
+                //     artistName: `$${unwindUser}.artistName`,
+                // },
             },
         })
         .project({
@@ -88,6 +108,15 @@ const getPlaylists = asyncHandler(async (req, res) => {
             data: '$data',
         })
         .sort({ categoryName: 'asc' })
+        .exec()
+        .then((data) => {
+            playlists = data
+        })
+        .catch((error) => {
+            console.log(error)
+            res.status(401)
+            throw new Error(error)
+        })
 
     res.status(200).json(playlists)
 })
@@ -205,19 +234,36 @@ const getPlaylistsByCategoryId = asyncHandler(async (req, res) => {
             .group({
                 _id: `$${unwindCategory}`,
                 data: {
-                    $push: {
-                        id: '$_id',
-                        name: '$name',
-                        slug: '$slug',
-                        categoryId: '$categoryId',
-                        description: '$description',
-                        thumbnail: '$thumbnail',
-                        likeCount: '$likeCount',
-                        createdAt: '$createdAt',
-                        countSong: { $size: `$${unwindSong}` },
-                        userId: '$userId',
-                        artistName: `$${unwindUser}.artistName`,
-                    },
+                    $cond: [
+                        { $gt: [{ $size: `$${unwindSong}` }, 0] },
+                        {
+                            id: '$_id',
+                            name: '$name',
+                            slug: '$slug',
+                            categoryId: '$categoryId',
+                            description: '$description',
+                            thumbnail: '$thumbnail',
+                            likeCount: '$likeCount',
+                            createdAt: '$createdAt',
+                            countSong: { $size: `$${unwindSong}` },
+                            userId: '$userId',
+                            artistName: `$${unwindUser}.artistName`,
+                        },
+                        '$$REMOVE',
+                    ],
+                    // $push: {
+                    //     id: '$_id',
+                    //     name: '$name',
+                    //     slug: '$slug',
+                    //     categoryId: '$categoryId',
+                    //     description: '$description',
+                    //     thumbnail: '$thumbnail',
+                    //     likeCount: '$likeCount',
+                    //     createdAt: '$createdAt',
+                    //     countSong: { $size: `$${unwindSong}` },
+                    //     userId: '$userId',
+                    //     artistName: `$${unwindUser}.artistName`,
+                    // },
                 },
             })
             .project({
@@ -263,19 +309,36 @@ const getPlaylistsByCategoryId = asyncHandler(async (req, res) => {
             .group({
                 _id: `$${unwindCategory}`,
                 data: {
-                    $push: {
-                        id: '$_id',
-                        name: '$name',
-                        slug: '$slug',
-                        categoryId: '$categoryId',
-                        description: '$description',
-                        thumbnail: '$thumbnail',
-                        likeCount: '$likeCount',
-                        createdAt: '$createdAt',
-                        countSong: { $size: `$${unwindSong}` },
-                        userId: '$userId',
-                        artistName: `$${unwindUser}.artistName`,
-                    },
+                    $cond: [
+                        { $gt: [{ $size: `$${unwindSong}` }, 0] },
+                        {
+                            id: '$_id',
+                            name: '$name',
+                            slug: '$slug',
+                            categoryId: '$categoryId',
+                            description: '$description',
+                            thumbnail: '$thumbnail',
+                            likeCount: '$likeCount',
+                            createdAt: '$createdAt',
+                            countSong: { $size: `$${unwindSong}` },
+                            userId: '$userId',
+                            artistName: `$${unwindUser}.artistName`,
+                        },
+                        '$$REMOVE',
+                    ],
+                    // $push: {
+                    //     id: '$_id',
+                    //     name: '$name',
+                    //     slug: '$slug',
+                    //     categoryId: '$categoryId',
+                    //     description: '$description',
+                    //     thumbnail: '$thumbnail',
+                    //     likeCount: '$likeCount',
+                    //     createdAt: '$createdAt',
+                    //     countSong: { $size: `$${unwindSong}` },
+                    //     userId: '$userId',
+                    //     artistName: `$${unwindUser}.artistName`,
+                    // },
                 },
             })
             .project({
