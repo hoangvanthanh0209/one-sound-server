@@ -215,12 +215,12 @@ const getPlaylistsByCategoryId = asyncHandler(async (req, res) => {
         const start = (+page - 1) * +limit
         // const end = +page * +limit > count ? count : +page * +limit
 
-        const pagination = {
-            page: +page,
-            limit: +limit,
-            totalRows: count,
-            totalPages: Math.ceil(count / limit),
-        }
+        // const pagination = {
+        //     page: +page,
+        //     limit: +limit,
+        //     totalRows: count,
+        //     totalPages: Math.ceil(count / limit),
+        // }
 
         await Playlist.aggregate()
             .lookup(lookupPlaylistToCategory)
@@ -234,23 +234,25 @@ const getPlaylistsByCategoryId = asyncHandler(async (req, res) => {
             .group({
                 _id: `$${unwindCategory}`,
                 data: {
-                    $cond: [
-                        { $gt: [{ $size: `$${unwindSong}` }, 0] },
-                        {
-                            id: '$_id',
-                            name: '$name',
-                            slug: '$slug',
-                            categoryId: '$categoryId',
-                            description: '$description',
-                            thumbnail: '$thumbnail',
-                            likeCount: '$likeCount',
-                            createdAt: '$createdAt',
-                            countSong: { $size: `$${unwindSong}` },
-                            userId: '$userId',
-                            artistName: `$${unwindUser}.artistName`,
-                        },
-                        '$$REMOVE',
-                    ],
+                    $push: {
+                        $cond: [
+                            { $gt: [{ $size: `$${unwindSong}` }, 0] },
+                            {
+                                id: '$_id',
+                                name: '$name',
+                                slug: '$slug',
+                                categoryId: '$categoryId',
+                                description: '$description',
+                                thumbnail: '$thumbnail',
+                                likeCount: '$likeCount',
+                                createdAt: '$createdAt',
+                                countSong: { $size: `$${unwindSong}` },
+                                userId: '$userId',
+                                artistName: `$${unwindUser}.artistName`,
+                            },
+                            '$$REMOVE',
+                        ],
+                    },
                     // $push: {
                     //     id: '$_id',
                     //     name: '$name',
@@ -275,7 +277,14 @@ const getPlaylistsByCategoryId = asyncHandler(async (req, res) => {
                 data: '$data',
             })
             .sort({ categoryName: 'asc' })
-            .addFields({ pagination })
+            .addFields({
+                pagination: {
+                    page: +page,
+                    limit: +limit,
+                    totalRows: { $size: '$data' },
+                    // totalPages: Math.ceil(count / limit),
+                },
+            })
             .exec()
             .then((data) => {
                 playlists = data[0]
@@ -290,12 +299,12 @@ const getPlaylistsByCategoryId = asyncHandler(async (req, res) => {
         const start = (+page - 1) * +limit
         // const end = +page * +limit > count ? +page * +limit : count
 
-        const pagination = {
-            page: +page,
-            limit: +limit,
-            totalRows: count,
-            totalPages: Math.ceil(count / limit),
-        }
+        // const pagination = {
+        //     page: +page,
+        //     limit: +limit,
+        //     totalRows: count,
+        //     totalPages: Math.ceil(count / limit),
+        // }
 
         await Playlist.aggregate()
             .lookup(lookupPlaylistToCategory)
@@ -309,23 +318,25 @@ const getPlaylistsByCategoryId = asyncHandler(async (req, res) => {
             .group({
                 _id: `$${unwindCategory}`,
                 data: {
-                    $cond: [
-                        { $gt: [{ $size: `$${unwindSong}` }, 0] },
-                        {
-                            id: '$_id',
-                            name: '$name',
-                            slug: '$slug',
-                            categoryId: '$categoryId',
-                            description: '$description',
-                            thumbnail: '$thumbnail',
-                            likeCount: '$likeCount',
-                            createdAt: '$createdAt',
-                            countSong: { $size: `$${unwindSong}` },
-                            userId: '$userId',
-                            artistName: `$${unwindUser}.artistName`,
-                        },
-                        '$$REMOVE',
-                    ],
+                    $push: {
+                        $cond: [
+                            { $gt: [{ $size: `$${unwindSong}` }, 0] },
+                            {
+                                id: '$_id',
+                                name: '$name',
+                                slug: '$slug',
+                                categoryId: '$categoryId',
+                                description: '$description',
+                                thumbnail: '$thumbnail',
+                                likeCount: '$likeCount',
+                                createdAt: '$createdAt',
+                                countSong: { $size: `$${unwindSong}` },
+                                userId: '$userId',
+                                artistName: `$${unwindUser}.artistName`,
+                            },
+                            '$$REMOVE',
+                        ],
+                    },
                     // $push: {
                     //     id: '$_id',
                     //     name: '$name',
@@ -350,7 +361,14 @@ const getPlaylistsByCategoryId = asyncHandler(async (req, res) => {
                 data: '$data',
             })
             .sort({ categoryName: 'asc' })
-            .addFields({ pagination })
+            .addFields({
+                pagination: {
+                    page: +page,
+                    limit: +limit,
+                    totalRows: { $size: '$data' },
+                    // totalPages: Math.ceil(count / limit),
+                },
+            })
             .exec()
             .then((data) => {
                 playlists = data[0]
