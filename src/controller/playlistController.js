@@ -183,9 +183,9 @@ const getByUserId = asyncHandler(async (req, res) => {
         .lookup(lookupPlaylistToUser)
         .lookup(lookupPlaylistToSong)
         .unwind(unwindUser)
-        .match({ userId: new objectId(req.query.userId) })
-        .sort({ likeCount: 'desc', createdAt: 'desc' })
+        .match({ $expr: { userId: new objectId(req.query.userId) }, $expr: { $gt: [{ $size: `$${unwindSong}` }, 0] } })
         .project(columnPlaylistReturn)
+        .sort({ likeCount: 'desc', createdAt: 'desc' })
         .exec()
         .then((data) => {
             playlists = data
@@ -207,10 +207,10 @@ const getPlaylistsByCategoryId = asyncHandler(async (req, res) => {
 
     let playlists
     if (name) {
-        const count = await Playlist.find({
-            categoryId: new objectId(categoryId),
-            search: { $regex: name, $options: 'i' },
-        }).count()
+        // const count = await Playlist.find({
+        //     categoryId: new objectId(categoryId),
+        //     search: { $regex: name, $options: 'i' },
+        // }).count()
 
         const start = (+page - 1) * +limit
         // const end = +page * +limit > count ? count : +page * +limit
@@ -294,7 +294,7 @@ const getPlaylistsByCategoryId = asyncHandler(async (req, res) => {
                 throw new Error('Thể loại này không tồn tại')
             })
     } else {
-        const count = await Playlist.find({ categoryId: new objectId(categoryId) }).count()
+        // const count = await Playlist.find({ categoryId: new objectId(categoryId) }).count()
 
         const start = (+page - 1) * +limit
         // const end = +page * +limit > count ? +page * +limit : count
