@@ -167,6 +167,7 @@ const getTopPlaylistsFavourite = asyncHandler(async (req, res) => {
         .lookup(lookupPlaylistToUser)
         .lookup(lookupPlaylistToSong)
         .unwind(unwindUser)
+        .match({ $expr: { $gt: [{ $size: `$${unwindSong}` }, 0] } })
         .project(columnPlaylistReturn)
         .sort({ likeCount: 'desc' })
         .limit(top)
