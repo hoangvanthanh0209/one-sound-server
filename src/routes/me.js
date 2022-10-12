@@ -16,6 +16,7 @@ import {
     deleteSong,
     updatePassword,
     getPlaylistOfMe,
+    getPlaylistsForPage,
 } from '../controller/meController.js'
 
 const router = express.Router()
@@ -28,6 +29,7 @@ const cpUpload = upload.fields([
 // [api/me]
 router.get('/', auth.protectUser, getMe)
 router.get('/playlist', auth.protectUser, getPlaylists)
+router.get('/playlist/get', auth.protectUser, getPlaylistsForPage)
 router.get('/playlist/getInfoAndSong', auth.protectUser, getInfoAndSong)
 router.get('/playlist/ofMe', auth.protectUser, getPlaylistOfMe)
 router.get('/playlist/:pId', auth.protectUser, getPlaylistById)

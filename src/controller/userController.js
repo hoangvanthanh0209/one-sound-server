@@ -27,6 +27,19 @@ const slugifyOptionsSearch = {
     trim: true,
 }
 
+const project = {
+    $project: {
+        _id: 0,
+        id: '$_id',
+        name: '$name',
+        slug: '$slug',
+        artistName: '$artistName',
+        avatar: '$avatar',
+        description: '$description',
+        likeCount: '$likeCount',
+    },
+}
+
 // @desc    Get user list
 // @route   GET /api/users
 // @access  Private (admin)
@@ -37,50 +50,124 @@ const getUserList = asyncHandler(async (req, res) => {
 })
 
 // @desc    Get users for page
-// @route   GET /api/users/query
+// @route   GET /api/users/get?page=x&limit=x&name=x&typeSort=x
 // @access  Public
 const getUsers = asyncHandler(async (req, res) => {
-    const { page = 1, limit = 8 } = req.query
+    const { page, limit, name = '', typeSort } = req.query
+    const pageNum = +page,
+        limitNum = +limit
+    let users = []
+    let pagination
 
-    const count = await User.find({ role: process.env.USER_ROLE }).count()
+    const match = {
+        $match: {
+            search: { $regex: name, $options: 'i' },
+            role: process.env.USER_ROLE,
+        },
+    }
 
-    const start = (+page - 1) * +limit
-    const end = +page * +limit > count ? count : +page * +limit
+    let sort
+    if (typeSort) {
+        sort = {
+            $sort: {
+                likeCount: typeSort === 'asc' ? 1 : -1,
+                name: 1,
+            },
+        }
+    } else {
+        sort = {
+            $sort: {
+                name: 1,
+            },
+        }
+    }
 
-    const userList = await User.find({ role: process.env.USER_ROLE })
-        .select(process.env.USER_INFO)
-        .skip(start)
-        .limit(end)
+    if (limitNum) {
+        const start = (pageNum - 1) * limitNum
 
-    res.status(200).json(userList)
+        const skip = {
+            $skip: start,
+        }
+        const limitCond = {
+            $limit: limitNum,
+        }
+
+        const count = await User.find({
+            search: { $regex: name, $options: 'i' },
+            role: process.env.USER_ROLE,
+        })
+            .select(process.env.USER_INFO)
+            .count()
+
+        await User.aggregate([match, project, skip, limitCond, sort])
+            .exec()
+            .then((data) => {
+                users = data
+            })
+            .catch((error) => {
+                console.log(error)
+                res.status(400)
+                throw new Error('Có lỗi xảy ra')
+            })
+
+        pagination = {
+            page: pageNum || 1,
+            limit: limitNum,
+            totalRows: users.length ? count : 0,
+        }
+    } else {
+        await User.aggregate([match, sort, project])
+            .exec()
+            .then((data) => {
+                users = data
+            })
+            .catch((error) => {
+                console.log(error)
+                res.status(400)
+                throw new Error('Có lỗi xảy ra')
+            })
+
+        pagination = {
+            page: 1,
+            limit: users.length,
+            totalRows: users.length,
+        }
+    }
+
+    const dataReturn = {
+        data: users,
+        pagination,
+    }
+
+    res.status(200).json(dataReturn)
 })
 
 // @desc    Get user by name
 // @route   GET /api/users/search
 // @access  Public
-const getUserByName = asyncHandler(async (req, res) => {
-    const userList = await User.find({
-        search: { $regex: req.query.name, $options: 'i' },
-        role: process.env.USER_ROLE,
-    }).select(process.env.USER_INFO)
+// const getUserByName = asyncHandler(async (req, res) => {
+//     const userList = await User.find({
+//         search: { $regex: req.query.name, $options: 'i' },
+//         role: process.env.USER_ROLE,
+//     }).select(process.env.USER_INFO)
 
-    res.status(200).json(userList)
-})
+//     res.status(200).json(userList)
+// })
 
 // @desc    Get top user favourite
 // @route   GET /api/users/top
 // @access  Public
-const getTopUsersFavourite = asyncHandler(async (req, res) => {
-    // const top = req.query.top || process.env.TOP_USER
-    const top = Number.parseInt(req.query.top) || null
+// const getTopUsersFavourite = asyncHandler(async (req, res) => {
+//     // const top = req.query.top || process.env.TOP_USER
+//     const top = Number.parseInt(req.query.top) || null
 
-    const users = await User.find({ role: process.env.USER_ROLE })
-        .select(process.env.USER_INFO)
-        .sort({ likeCount: 'desc' })
-        .limit(top)
+//     const users = await User.find({ role: process.env.USER_ROLE })
+//         .select(process.env.USER_INFO)
+//         .sort({ likeCount: 'desc' })
+//         .limit(top)
 
-    res.status(200).json(users)
-})
+//     res.status(200).json(users)
+// })
 
 // @desc    Get user by id
 // @route   GET /api/users/:id
@@ -284,8 +371,8 @@ const generateToken = (id) => {
 export {
     getUserList,
     getUsers,
-    getUserByName,
-    getTopUsersFavourite,
+    // getUserByName,
+    // getTopUsersFavourite,
     getUserById,
     resgiter,
     login,

@@ -5,6 +5,6 @@ const router = express.Router()
 
 // [api/categories]
 router.get('/', getCategories)
-router.get('/:categoryId', getCategoryById)
+router.get('/getById', getCategoryById) // getById?categoryId=x
 
 export default router

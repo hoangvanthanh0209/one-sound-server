@@ -126,6 +126,68 @@ const getPlaylists = asyncHandler(async (req, res) => {
     res.status(200).json(playlists)
 })
 
+// @desc    Get playlists of user for page
+// @route   GET /api/me/playlist/get?page=x&limit=x
+// @access  Private
+const getPlaylistsForPage = asyncHandler(async (req, res) => {
+    const { page, limit } = req.query
+    let playlists
+
+    if (limit) {
+        const start = (+page - 1) * +limit
+        const count = await Playlist.find({ userId: new objectId(req.user.id) }).count()
+        await Playlist.aggregate()
+            .lookup(lookupPlaylistToSong)
+            .lookup(lookupPlaylistToCategory)
+            .match({ userId: new objectId(req.user.id) })
+            .unwind(unwindCategory)
+            .project(columnPlaylistReturn)
+            .sort({ likeCount: 'desc', name: 'asc' })
+            .skip(start)
+            .limit(+limit)
+            .exec()
+            .then((data) => {
+                playlists = data
+            })
+            .catch((error) => {
+                console.log(error)
+                res.status(400)
+                throw new Error(error)
+            })
+
+        const dataReturn = {
+            data: playlists,
+            pagination: {
+                page: +page,
+                limit: +limit,
+                totalRows: count,
+                // totalPages: Math.ceil(count / limit),
+            },
+        }
+
+        res.status(200).json(dataReturn)
+    } else {
+        await Playlist.aggregate()
+            .lookup(lookupPlaylistToSong)
+            .lookup(lookupPlaylistToCategory)
+            .match({ userId: new objectId(req.user.id) })
+            .unwind(unwindCategory)
+            .project(columnPlaylistReturn)
+            .sort({ likeCount: 'desc', name: 'asc' })
+            .exec()
+            .then((data) => {
+                playlists = data
+            })
+            .catch((error) => {
+                console.log(error)
+                res.status(400)
+                throw new Error(error)
+            })
+
+        res.status(200).json(playlists)
+    }
+})
+
 // @desc    Get playlist by id
 // @route   GET /api/me/playlist/:pId
 // @access  Private
@@ -595,6 +657,7 @@ const generateToken = (id) => {
 export {
     getMe,
     getPlaylists,
+    getPlaylistsForPage,
     getPlaylistById,
     getInfoAndSong,
     getPlaylistOfMe,

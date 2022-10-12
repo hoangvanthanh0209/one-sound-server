@@ -10,11 +10,12 @@ const getCategories = asyncHandler(async (req, res) => {
     res.status(200).json(categories)
 })
 
-// @desc    Get categoriescategories
-// @route   GET /api/categories
+// @desc    Get category by id
+// @route   GET /api/categories/getById?categoryId=x
 // @access  Public
 const getCategoryById = asyncHandler(async (req, res) => {
-    const category = await Category.findOne({ _id: req.params.categoryId })
+    const categoryId = req.query.categoryId
+    const category = await Category.findOne({ _id: categoryId })
 
     res.status(200).json(category)
 })
