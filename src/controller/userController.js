@@ -170,10 +170,11 @@ const getUsers = asyncHandler(async (req, res) => {
 // })
 
 // @desc    Get user by id
-// @route   GET /api/users/:id
+// @route   GET /api/users/:userId
 // @access  Public
 const getUserById = asyncHandler(async (req, res) => {
-    const user = await User.findById(req.params.id).where({ role: process.env.USER_ROLE }).select(process.env.USER_INFO)
+    const userId = req.params.userId
+    const user = await User.findById(userId).where({ role: process.env.USER_ROLE }).select(process.env.USER_INFO)
 
     if (!user) {
         res.status(400)
@@ -275,10 +276,11 @@ const login = asyncHandler(async (req, res) => {
 })
 
 // @desc    Get user data
-// @route   PUT /api/users/reset/:id
+// @route   PUT /api/users/reset?userId=x
 // @access  Private (admin)
 const resetPassword = asyncHandler(async (req, res) => {
-    const user = await User.findById(req.params.id)
+    const userId = req.query.userId
+    const user = await User.findById(userId)
 
     if (user) {
         // hash password
@@ -287,7 +289,7 @@ const resetPassword = asyncHandler(async (req, res) => {
 
         user.password = hash
 
-        await User.findByIdAndUpdate(req.params.id, user)
+        await User.findByIdAndUpdate(userId, user)
         res.status(200).json('Đặt lại mật khẩu thành công')
     } else {
         res.status(400)
@@ -296,10 +298,11 @@ const resetPassword = asyncHandler(async (req, res) => {
 })
 
 // @desc    Toggle role user
-// @route   PUT /api/users/toggleRole/:id
+// @route   PUT /api/users/toggleRole?userId=x
 // @access  Private (admin)
 const toggleRole = asyncHandler(async (req, res) => {
-    const user = await User.findById(req.params.id)
+    const userId = req.query.userId
+    const user = await User.findById(userId)
 
     if (user) {
         user.role = user.role === process.env.ADMIN_ROLE ? process.env.USER_ROLE : process.env.ADMIN_ROLE
@@ -312,10 +315,11 @@ const toggleRole = asyncHandler(async (req, res) => {
 })
 
 // @desc    Toggle status user
-// @route   PUT /api/users/toggleStatus/:id
+// @route   PUT /api/users/toggleStatus?userId=x
 // @access  Private (admin)
 const toggleStatus = asyncHandler(async (req, res) => {
-    const user = await User.findById(req.params.id)
+    const userId = req.query.userId
+    const user = await User.findById(userId)
 
     if (user) {
         user.status =
@@ -329,10 +333,11 @@ const toggleStatus = asyncHandler(async (req, res) => {
 })
 
 // @desc    Like user
-// @route   PUT /api/users/like/:id
+// @route   PUT /api/users/like?userId=x
 // @access  Private (user)
 const likeUser = asyncHandler(async (req, res) => {
-    const user = await User.findById(req.params.id)
+    const userId = req.query.userId
+    const user = await User.findById(userId)
 
     if (user) {
         user.likeCount = user.likeCount + 1
@@ -345,10 +350,11 @@ const likeUser = asyncHandler(async (req, res) => {
 })
 
 // @desc    Delete user
-// @route   DELETE /api/users/:id
+// @route   DELETE /api/users/:userId
 // @access  Private
 const deleteUser = asyncHandler(async (req, res) => {
-    const user = await User.findById(req.params.id)
+    const userId = req.params.userId
+    const user = await User.findById(userId)
 
     // check user exist
     if (!user) {
@@ -361,7 +367,7 @@ const deleteUser = asyncHandler(async (req, res) => {
 
     await user.remove()
 
-    res.status(200).json({ id: req.params.id })
+    res.status(200).json({ id: userId })
 })
 
 const generateToken = (id) => {

@@ -3,70 +3,91 @@ import mongoose from 'mongoose'
 
 import { Song, Playlist } from '../models/index.js'
 
-const unwindUser = 'userData'
-const unwindPlaylist = 'playlistData'
 const objectId = mongoose.Types.ObjectId
 
-// for lookup(): like forgein key MySQL
-const lookupUser = {
-    from: 'users',
-    localField: 'userId',
-    foreignField: '_id',
-    as: unwindUser,
+const userUnwindPath = 'userData'
+const playlistUnwindPath = 'playlistData'
+
+const unwindUser = {
+    $unwind: `$${userUnwindPath}`,
+}
+const unwindPlaylist = {
+    $unwind: `$${playlistUnwindPath}`,
 }
 
 // for lookup(): like forgein key MySQL
-const loopkupPlaylist = {
-    from: 'playlists',
-    localField: 'playlistId',
-    foreignField: '_id',
-    as: unwindPlaylist,
+const lookupSongToUser = {
+    $lookup: {
+        from: 'users',
+        localField: 'userId',
+        foreignField: '_id',
+        as: userUnwindPath,
+    },
+}
+
+// for lookup(): like forgein key MySQL
+const loopkupSongToPlaylist = {
+    $lookup: {
+        from: 'playlists',
+        localField: 'playlistId',
+        foreignField: '_id',
+        as: playlistUnwindPath,
+    },
 }
 
 // define column return
-const columnSongReturn = {
-    _id: 0,
-    id: '$_id',
-    name: '$name',
-    slug: '$slug',
-    singer: '$singer',
-    year: '$year',
-    thumbnail: '$thumbnail',
-    mp3: '$mp3',
-    likeCount: '$likeCount',
-    createdAt: '$createdAt',
-    userId: '$userId',
-    playlistId: '$playlistId',
-    userSlug: `$${unwindUser}.slug`,
-    playlistSlug: `$${unwindPlaylist}.slug`,
-    artistName: `$${unwindUser}.artistName`,
-    playlistName: `$${unwindPlaylist}.name`,
+const projectSong = {
+    $project: {
+        _id: 0,
+        id: '$_id',
+        name: '$name',
+        slug: '$slug',
+        singer: '$singer',
+        year: '$year',
+        thumbnail: '$thumbnail',
+        mp3: '$mp3',
+        likeCount: '$likeCount',
+        createdAt: '$createdAt',
+        userId: '$userId',
+        playlistId: '$playlistId',
+        userSlug: `$${userUnwindPath}.slug`,
+        playlistSlug: `$${playlistUnwindPath}.slug`,
+        artistName: `$${userUnwindPath}.artistName`,
+        playlistName: `$${playlistUnwindPath}.name`,
+    },
 }
 
 // define column return
-const columnPlaylistReturn = {
-    _id: 0,
-    id: '$_id',
-    name: '$name',
-    slug: '$slug',
-    description: '$description',
-    thumbnail: '$thumbnail',
-    likeCount: '$likeCount',
-    userId: '$userId',
-    artistName: `$${unwindUser}.artistName`,
-    userSluf: `$${unwindUser}.slug`,
+const projectPlaylist = {
+    $project: {
+        _id: 0,
+        id: '$_id',
+        name: '$name',
+        slug: '$slug',
+        description: '$description',
+        thumbnail: '$thumbnail',
+        likeCount: '$likeCount',
+        userId: '$userId',
+        artistName: `$${userUnwindPath}.artistName`,
+        userSluf: `$${playlistUnwindPath}.slug`,
+    },
 }
 
 // @desc    Get song list
 // @route   GET /api/songs
 // @access  Public
 const getSongList = asyncHandler(async (req, res) => {
-    const songs = await Song.aggregate()
-        .lookup(lookupUser)
-        .lookup(loopkupPlaylist)
-        .unwind(unwindUser)
-        .unwind(unwindPlaylist)
-        .project(columnSongReturn)
+    let songs
+    await Song.aggregate([lookupSongToUser, loopkupSongToPlaylist, unwindUser, unwindPlaylist, projectSong])
+        .exec()
+        .then((data) => {
+            songs = data
+        })
+        .catch((error) => {
+            console.log(error)
+            res.status(400)
+            throw new Error('Có lỗi xảy ra')
+        })
 
     res.status(200).json(songs)
 })
@@ -74,57 +95,147 @@ const getSongList = asyncHandler(async (req, res) => {
 // @desc    Get song for nav
 // @route   GET /api/songs/query
 // @access  Public
-const getSongsForPage = asyncHandler(async (req, res) => {
-    const { page = 1, limit = 8 } = req.query
+// const getSongsForPage = asyncHandler(async (req, res) => {
+//     const { page = 1, limit = 8 } = req.query
 
-    const count = await Song.find().count()
+//     const count = await Song.find().count()
 
-    const start = (+page - 1) * +limit
-    const end = +page * +limit > count ? count : +page * +limit
+//     const start = (+page - 1) * +limit
+//     const end = +page * +limit > count ? count : +page * +limit
 
-    const songs = await Song.aggregate()
-        .lookup(lookupUser)
-        .lookup(loopkupPlaylist)
-        .unwind(unwindUser)
-        .unwind(unwindPlaylist)
-        .project(columnSongReturn)
-        .skip(start)
-        .limit(end)
+//     const songs = await Song.aggregate()
+//         .lookup(lookupUser)
+//         .lookup(loopkupPlaylist)
+//         .unwind(unwindUser)
+//         .unwind(unwindPlaylist)
+//         .project(columnSongReturn)
+//         .skip(start)
+//         .limit(end)
 
-    res.status(200).json(songs)
-})
+//     res.status(200).json(songs)
+// })
 
 // @desc    Get song by name
 // @route   GET /api/songs/search
 // @access  Public
-const getSongByName = asyncHandler(async (req, res) => {
-    const songs = await Song.aggregate()
-        .lookup(lookupUser)
-        .lookup(loopkupPlaylist)
-        .unwind(unwindUser)
-        .unwind(unwindPlaylist)
-        .match({ name: { $regex: req.query.name, $options: 'i' } })
-        .project(columnSongReturn)
+// const getSongByName = asyncHandler(async (req, res) => {
+//     const songs = await Song.aggregate()
+//         .lookup(lookupUser)
+//         .lookup(loopkupPlaylist)
+//         .unwind(unwindUser)
+//         .unwind(unwindPlaylist)
+//         .match({ name: { $regex: req.query.name, $options: 'i' } })
+//         .project(columnSongReturn)
 
-    res.status(200).json(songs)
-})
+//     res.status(200).json(songs)
+// })
 
 // @desc    Get top song
 // @route   GET /api/songs/top
 // @access  Public
-const getTopSongFavourite = asyncHandler(async (req, res) => {
-    const top = req.query.top || process.env.TOP_SONG
+// const getTopSongFavourite = asyncHandler(async (req, res) => {
+//     const top = req.query.top || process.env.TOP_SONG
 
-    const songs = await Song.aggregate()
-        .lookup(lookupUser)
-        .lookup(loopkupPlaylist)
-        .unwind(unwindUser)
-        .unwind(unwindPlaylist)
-        .project(columnSongReturn)
-        .sort({ likeCount: 'desc' })
-        .limit(+top)
+//     const songs = await Song.aggregate()
+//         .lookup(lookupUser)
+//         .lookup(loopkupPlaylist)
+//         .unwind(unwindUser)
+//         .unwind(unwindPlaylist)
+//         .project(columnSongReturn)
+//         .sort({ likeCount: 'desc' })
+//         .limit(+top)
 
-    res.status(200).json(songs)
+//     res.status(200).json(songs)
+// })
+
+// @desc    Get top song
+// @route   GET /api/songs/get?page=x&limit=x&name=x&typeSort=x
+// @access  Public
+const getSongs = asyncHandler(async (req, res) => {
+    const { page, limit, typeSort } = req.query
+    const pageNum = +page,
+        limitNum = +limit
+    let songs = []
+    let pagination
+
+    let sort
+    if (typeSort) {
+        sort = {
+            $sort: {
+                likeCount: typeSort === 'asc' ? 1 : -1,
+                name: 1,
+            },
+        }
+    } else {
+        sort = {
+            $sort: {
+                name: 1,
+            },
+        }
+    }
+
+    if (limitNum) {
+        const start = (pageNum - 1) * limitNum
+
+        const skip = {
+            $skip: start,
+        }
+        const limitCond = {
+            $limit: limitNum,
+        }
+
+        const count = await Song.find().select(process.env.USER_INFO).count()
+
+        await Song.aggregate([
+            lookupSongToUser,
+            loopkupSongToPlaylist,
+            unwindUser,
+            unwindPlaylist,
+            projectSong,
+            skip,
+            limitCond,
+            sort,
+        ])
+            .exec()
+            .then((data) => {
+                songs = data
+            })
+            .catch((error) => {
+                console.log(error)
+                res.status(400)
+                throw new Error('Có lỗi xảy ra')
+            })
+
+        pagination = {
+            page: pageNum || 1,
+            limit: limitNum,
+            totalRows: songs.length ? count : 0,
+        }
+    } else {
+        await Song.aggregate([lookupSongToUser, loopkupSongToPlaylist, unwindUser, unwindPlaylist, projectSong, sort])
+            .exec()
+            .then((data) => {
+                songs = data
+            })
+            .catch((error) => {
+                console.log(error)
+                res.status(400)
+                throw new Error('Có lỗi xảy ra')
+            })
+
+        pagination = {
+            page: 1,
+            limit: songs.length,
+            totalRows: songs.length,
+        }
+    }
+
+    const dataReturn = {
+        data: songs,
+        pagination,
+    }
+
+    res.status(200).json(dataReturn)
 })
 
 // @desc    Get songs
@@ -133,36 +244,29 @@ const getTopSongFavourite = asyncHandler(async (req, res) => {
 const getSongByPlaylistId = asyncHandler(async (req, res) => {
     const playlistId = req.query.playlistId
 
-    let playlist = {}
-    await Playlist.aggregate()
-        .lookup(lookupUser)
-        .unwind(unwindUser)
-        .match({ _id: new objectId(playlistId) })
-        .project(columnPlaylistReturn)
-        .exec()
-        .then((data) => {
-            playlist = data[0]
-        })
-        .catch((e) => {
-            console.log(e)
-            res.status(400)
-            throw new Error('Playlist không tồn tại')
-        })
+    const playlist = await Playlist.findById(playlistId)
+
+    if (!playlist) {
+        res.status(400)
+        throw new Error('Playlist không tồn tại')
+    }
+
+    const match = {
+        $match: {
+            playlistId: new objectId(playlistId),
+        },
+    }
 
     let songs = []
-    await Song.aggregate()
-        .lookup(loopkupPlaylist)
-        .lookup(lookupUser)
-        .unwind(unwindPlaylist)
-        .unwind(unwindUser)
-        .match({ playlistId: new objectId(playlistId) })
-        .project(columnSongReturn)
+    await Song.aggregate([lookupSongToUser, loopkupSongToPlaylist, unwindUser, unwindPlaylist, match, projectSong])
         .exec()
         .then((data) => {
-            songs = data
+            songs = data[0]
         })
-        .catch((e) => {
-            console.log(e)
+        .catch((error) => {
+            console.log(error)
+            res.status(400)
+            throw new Error('Có lỗi xảy ra')
         })
 
     res.status(200).json(songs)
@@ -174,42 +278,113 @@ const getSongByPlaylistId = asyncHandler(async (req, res) => {
 const getSongAndPlaylistInfo = asyncHandler(async (req, res) => {
     const playlistId = req.query.playlistId
 
-    let playlist = {}
-    await Playlist.aggregate()
-        .lookup(lookupUser)
-        .unwind(unwindUser)
-        .match({ _id: new objectId(playlistId) })
-        .project(columnPlaylistReturn)
-        .exec()
-        .then((data) => {
-            playlist = data[0]
-        })
-        .catch((e) => {
-            console.log(e)
-            res.status(400)
-            throw new Error('Playlist không tồn tại')
-        })
-
-    let songs = []
-    await Song.aggregate()
-        .lookup(loopkupPlaylist)
-        .unwind(unwindPlaylist)
-        .match({ playlistId: new objectId(playlistId) })
-        .project(columnSongReturn)
-        .exec()
-        .then((data) => {
-            songs = data
-        })
-        .catch((e) => {
-            console.log(e)
-        })
-
-    const dataReturn = {
-        playlist,
-        songs,
+    const match = {
+        $match: {
+            playlistId: new objectId(playlistId),
+        },
     }
 
-    res.status(200).json(dataReturn)
+    const group = {
+        $group: {
+            _id: `$${playlistUnwindPath}`,
+            data: {
+                $push: {
+                    id: '$_id',
+                    name: '$name',
+                    slug: '$slug',
+                    singer: '$singer',
+                    year: '$year',
+                    thumbnail: '$thumbnail',
+                    mp3: '$mp3',
+                    likeCount: '$likeCount',
+                    createdAt: '$createdAt',
+                    userId: '$userId',
+                    playlistId: '$playlistId',
+                    userSlug: `$${userUnwindPath}.slug`,
+                    playlistSlug: `$${playlistUnwindPath}.slug`,
+                    artistName: `$${userUnwindPath}.artistName`,
+                    playlistName: `$${playlistUnwindPath}.name`,
+                },
+            },
+        },
+    }
+
+    const project = {
+        $project: {
+            _id: 0,
+            playlist: {
+                id: '$_id._id',
+                name: '$_id.name',
+                description: '$_id.description',
+                thumbnail: '$_id.thumbnail',
+            },
+            songs: '$data',
+        },
+    }
+
+    const sort = {
+        $sort: { name: 1 },
+    }
+
+    let songs
+    await Song.aggregate([
+        lookupSongToUser,
+        loopkupSongToPlaylist,
+        unwindUser,
+        unwindPlaylist,
+        match,
+        group,
+        project,
+        sort,
+    ])
+        .exec()
+        .then((data) => {
+            songs = data[0]
+        })
+        .catch((error) => {
+            console.log(error)
+            res.status(400)
+            throw new Error('Có lỗi xảy ra')
+        })
+
+    res.status(200).json(songs)
+
+    // let playlist = {}
+    // await Playlist.aggregate()
+    //     .lookup(lookupUser)
+    //     .unwind(unwindUser)
+    //     .match({ _id: new objectId(playlistId) })
+    //     .project(columnPlaylistReturn)
+    //     .exec()
+    //     .then((data) => {
+    //         playlist = data[0]
+    //     })
+    //     .catch((e) => {
+    //         console.log(e)
+    //         res.status(400)
+    //         throw new Error('Playlist không tồn tại')
+    //     })
+
+    // let songs = []
+    // await Song.aggregate()
+    //     .lookup(loopkupPlaylist)
+    //     .unwind(unwindPlaylist)
+    //     .match({ playlistId: new objectId(playlistId) })
+    //     .project(columnSongReturn)
+    //     .exec()
+    //     .then((data) => {
+    //         songs = data
+    //     })
+    //     .catch((e) => {
+    //         console.log(e)
+    //     })
+
+    // const dataReturn = {
+    //     playlist,
+    //     songs,
+    // }
+
+    // res.status(200).json(dataReturn)
 })
 
 // @desc    Get song of user
@@ -217,39 +392,53 @@ const getSongAndPlaylistInfo = asyncHandler(async (req, res) => {
 // @access  Public
 const getPopularSongByUserId = asyncHandler(async (req, res) => {
     const userId = req.query.userId
-    const limit = 10
+    const limitCount = 10
+
+    const match = {
+        $match: {
+            userId: new objectId(userId),
+        },
+    }
+
+    const sort = {
+        $sort: {
+            likeCount: -1,
+            createdAt: -1,
+            name: -1,
+        },
+    }
+
+    const limit = {
+        $limit: limitCount,
+    }
 
     let songs = []
-    await Song.aggregate()
-        .lookup(loopkupPlaylist)
-        .unwind(unwindPlaylist)
-        .match({ userId: new objectId(userId) })
-        .project(columnSongReturn)
-        .sort({ likeCount: 'desc', createdAt: 'desc', name: 'desc' })
-        .limit(limit)
+    await Song.aggregate([loopkupSongToPlaylist, unwindPlaylist, match, projectSong, sort, limit])
         .exec()
         .then((data) => {
             songs = data
         })
-        .catch((e) => {
-            console.log(e)
+        .catch((error) => {
+            console.log(error)
+            res.status(400)
+            throw new Error('Có lỗi xảy ra')
         })
 
     res.status(200).json(songs)
 })
 
 // @desc    Get song by id
-// @route   GET /api/songs/:id
+// @route   GET /api/songs/:songId
 // @access  Public
 const getSongById = asyncHandler(async (req, res) => {
+    const songId = req.params.songId
+    const match = {
+        $match: {
+            _id: new objectId(songId),
+        },
+    }
     let song = {}
-    await Song.aggregate()
-        .lookup(lookupUser)
-        .lookup(loopkupPlaylist)
-        .unwind(unwindUser)
-        .unwind(unwindPlaylist)
-        .match({ _id: new objectId(req.params.id) })
-        .project(columnSongReturn)
+    await Song.aggregate([lookupSongToUser, loopkupSongToPlaylist, unwindUser, unwindPlaylist, match, projectSong])
         .exec()
         .then((data) => {
             song = data[0]
@@ -264,10 +453,11 @@ const getSongById = asyncHandler(async (req, res) => {
 })
 
 // @desc    Like song
-// @route   PUT /api/songs/like/:id
+// @route   PUT /api/songs/like?songId=x
 // @access  Public
 const likeSong = asyncHandler(async (req, res) => {
-    const song = await Song.findById(req.params.id)
+    const songId = req.query.songId
+    const song = await Song.findById(songId)
 
     if (song) {
         song.likeCount = song.likeCount + 1
@@ -281,9 +471,10 @@ const likeSong = asyncHandler(async (req, res) => {
 
 export {
     getSongList,
-    getSongsForPage,
-    getSongByName,
-    getTopSongFavourite,
+    // getSongsForPage,
+    // getSongByName,
+    // getTopSongFavourite,
+    getSongs,
     getSongByPlaylistId,
     getSongAndPlaylistInfo,
     getPopularSongByUserId,
