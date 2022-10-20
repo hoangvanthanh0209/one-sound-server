@@ -25,7 +25,7 @@ router.post('/login', login)
 router.put('/reset', auth.protectAdmin, resetPassword)
 router.put('/toggleRole', auth.protectAdmin, toggleRole)
 router.put('/toggleStatus', auth.protectAdmin, toggleStatus)
-router.put('/like', likeUser)
+router.put('/like/:id', likeUser)
 router.delete('/:userId', auth.protectAdmin, deleteUser)
 
 export default router

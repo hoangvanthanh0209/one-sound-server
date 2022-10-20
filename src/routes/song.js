@@ -18,6 +18,6 @@ router.get('/getSongsByPlaylistId', getSongsByPlaylistId)
 router.get('/getSongAndPlaylistInfo', getSongAndPlaylistInfo)
 router.get('/getPopularSongByUserId', getPopularSongByUserId)
 router.get('/:songId', getSongById)
-router.put('/like', likeSong)
+router.put('/like/:id', likeSong)
 
 export default router
