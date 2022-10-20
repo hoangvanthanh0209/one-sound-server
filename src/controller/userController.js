@@ -307,7 +307,7 @@ const toggleStatus = asyncHandler(async (req, res) => {
 // @route   PUT /api/users/like?userId=x
 // @access  Private (user)
 const likeUser = asyncHandler(async (req, res) => {
-    const userId = req.query.userId
+    const userId = req.params.id
     const user = await User.findById(userId)
 
     if (user) {

@@ -359,11 +359,10 @@ const getSongById = asyncHandler(async (req, res) => {
     res.status(200).json(song)
 })
 
-// @desc    Like song
-// @route   PUT /api/songs/like?songId=x
+// @desc    Like song/:id?songId=x
 // @access  Public
 const likeSong = asyncHandler(async (req, res) => {
-    const songId = req.query.songId
+    const songId = req.params.id
     const song = await Song.findById(songId)
 
     if (song) {
