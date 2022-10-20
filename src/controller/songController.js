@@ -92,62 +92,6 @@ const getSongList = asyncHandler(async (req, res) => {
     res.status(200).json(songs)
 })
 
-// @desc    Get song for nav
-// @route   GET /api/songs/query
-// @access  Public
-// const getSongsForPage = asyncHandler(async (req, res) => {
-//     const { page = 1, limit = 8 } = req.query
-
-//     const count = await Song.find().count()
-
-//     const start = (+page - 1) * +limit
-//     const end = +page * +limit > count ? count : +page * +limit
-
-//     const songs = await Song.aggregate()
-//         .lookup(lookupUser)
-//         .lookup(loopkupPlaylist)
-//         .unwind(unwindUser)
-//         .unwind(unwindPlaylist)
-//         .project(columnSongReturn)
-//         .skip(start)
-//         .limit(end)
-
-//     res.status(200).json(songs)
-// })
-
-// @desc    Get song by name
-// @route   GET /api/songs/search
-// @access  Public
-// const getSongByName = asyncHandler(async (req, res) => {
-//     const songs = await Song.aggregate()
-//         .lookup(lookupUser)
-//         .lookup(loopkupPlaylist)
-//         .unwind(unwindUser)
-//         .unwind(unwindPlaylist)
-//         .match({ name: { $regex: req.query.name, $options: 'i' } })
-//         .project(columnSongReturn)
-
-//     res.status(200).json(songs)
-// })
-
-// @desc    Get top song
-// @route   GET /api/songs/top
-// @access  Public
-// const getTopSongFavourite = asyncHandler(async (req, res) => {
-//     const top = req.query.top || process.env.TOP_SONG
-
-//     const songs = await Song.aggregate()
-//         .lookup(lookupUser)
-//         .lookup(loopkupPlaylist)
-//         .unwind(unwindUser)
-//         .unwind(unwindPlaylist)
-//         .project(columnSongReturn)
-//         .sort({ likeCount: 'desc' })
-//         .limit(+top)
-
-//     res.status(200).json(songs)
-// })
-
 // @desc    Get top song
 // @route   GET /api/songs/get?page=x&limit=x&name=x&typeSort=x
 // @access  Public
@@ -241,12 +185,12 @@ const getSongs = asyncHandler(async (req, res) => {
 // @desc    Get songs
 // @route   GET /api/songs/getSong?playlistId=x
 // @access  Public
-const getSongByPlaylistId = asyncHandler(async (req, res) => {
+const getSongsByPlaylistId = asyncHandler(async (req, res) => {
     const playlistId = req.query.playlistId
 
     const playlist = await Playlist.findById(playlistId)
 
-    if (!playlist) {
+    if (!Object.keys(playlist).length) {
         res.status(400)
         throw new Error('Playlist không tồn tại')
     }
@@ -261,7 +205,7 @@ const getSongByPlaylistId = asyncHandler(async (req, res) => {
     await Song.aggregate([lookupSongToUser, loopkupSongToPlaylist, unwindUser, unwindPlaylist, match, projectSong])
         .exec()
         .then((data) => {
-            songs = data[0]
+            songs = data
         })
         .catch((error) => {
             console.log(error)
@@ -348,43 +292,6 @@ const getSongAndPlaylistInfo = asyncHandler(async (req, res) => {
         })
 
     res.status(200).json(songs)
-
-    // let playlist = {}
-    // await Playlist.aggregate()
-    //     .lookup(lookupUser)
-    //     .unwind(unwindUser)
-    //     .match({ _id: new objectId(playlistId) })
-    //     .project(columnPlaylistReturn)
-    //     .exec()
-    //     .then((data) => {
-    //         playlist = data[0]
-    //     })
-    //     .catch((e) => {
-    //         console.log(e)
-    //         res.status(400)
-    //         throw new Error('Playlist không tồn tại')
-    //     })
-
-    // let songs = []
-    // await Song.aggregate()
-    //     .lookup(loopkupPlaylist)
-    //     .unwind(unwindPlaylist)
-    //     .match({ playlistId: new objectId(playlistId) })
-    //     .project(columnSongReturn)
-    //     .exec()
-    //     .then((data) => {
-    //         songs = data
-    //     })
-    //     .catch((e) => {
-    //         console.log(e)
-    //     })
-
-    // const dataReturn = {
-    //     playlist,
-    //     songs,
-    // }
-
-    // res.status(200).json(dataReturn)
 })
 
 // @desc    Get song of user
@@ -471,11 +378,8 @@ const likeSong = asyncHandler(async (req, res) => {
 
 export {
     getSongList,
-    // getSongsForPage,
-    // getSongByName,
-    // getTopSongFavourite,
     getSongs,
-    getSongByPlaylistId,
+    getSongsByPlaylistId,
     getSongAndPlaylistInfo,
     getPopularSongByUserId,
     getSongById,

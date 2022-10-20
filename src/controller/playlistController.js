@@ -1,19 +1,15 @@
 import asyncHandler from 'express-async-handler'
 import mongoose from 'mongoose'
 
-import { Playlist } from '../models/index.js'
+import { Playlist, Category } from '../models/index.js'
+
+const objectId = mongoose.Types.ObjectId
 
 const unwindCategory = 'categoryData'
 const unwindSong = 'songData'
 const unwindUser = 'userData'
 
 // for lookup(): like forgein key MySQL
-const lookupUser = {
-    from: 'users',
-    localField: 'userId',
-    foreignField: '_id',
-    as: unwindUser,
-}
 const lookupPlaylistToCategory = {
     from: 'categories',
     localField: 'categoryId',
@@ -34,7 +30,7 @@ const lookupPlaylistToUser = {
 }
 
 // define column return
-const columnPlaylistReturn = {
+const projectPlaylist = {
     _id: 0,
     id: '$_id',
     name: '$name',
@@ -48,66 +44,59 @@ const columnPlaylistReturn = {
     countSong: { $size: `$${unwindSong}` },
 }
 
-const objectId = mongoose.Types.ObjectId
-
 // @desc    Get playlists
 // @route   GET /api/playlists
 // @access  Public
 const getPlaylists = asyncHandler(async (req, res) => {
-    // const playlists = await Playlist.aggregate().lookup(lookupUser).unwind(unwindUser).project(columnPlaylistReturn)
     let playlists
+
+    const group = {
+        _id: `$${unwindCategory}`,
+        data: {
+            $push: {
+                $cond: [
+                    { $gt: [{ $size: `$${unwindSong}` }, 0] },
+                    {
+                        id: '$_id',
+                        name: '$name',
+                        slug: '$slug',
+                        categoryId: '$categoryId',
+                        description: '$description',
+                        thumbnail: '$thumbnail',
+                        likeCount: '$likeCount',
+                        createdAt: '$createdAt',
+                        countSong: { $size: `$${unwindSong}` },
+                        userId: '$userId',
+                        artistName: `$${unwindUser}.artistName`,
+                    },
+                    '$$REMOVE',
+                ],
+            },
+        },
+    }
+
+    const project = {
+        _id: 0,
+        categoryId: '$_id._id',
+        categoryName: '$_id.name',
+        categorySlug: '$_id.slug',
+        count: { $size: '$data' },
+        data: '$data',
+    }
+
+    const sort = {
+        categoryName: 'desc',
+    }
+
     await Playlist.aggregate()
         .lookup(lookupPlaylistToCategory)
         .lookup(lookupPlaylistToSong)
         .lookup(lookupPlaylistToUser)
         .unwind(unwindCategory)
         .unwind(unwindUser)
-        .group({
-            _id: `$${unwindCategory}`,
-            data: {
-                $push: {
-                    $cond: [
-                        { $gt: [{ $size: `$${unwindSong}` }, 0] },
-                        {
-                            id: '$_id',
-                            name: '$name',
-                            slug: '$slug',
-                            categoryId: '$categoryId',
-                            description: '$description',
-                            thumbnail: '$thumbnail',
-                            likeCount: '$likeCount',
-                            createdAt: '$createdAt',
-                            countSong: { $size: `$${unwindSong}` },
-                            userId: '$userId',
-                            artistName: `$${unwindUser}.artistName`,
-                        },
-                        '$$REMOVE',
-                    ],
-                },
-                // $push: {
-                //     id: '$_id',
-                //     name: '$name',
-                //     slug: '$slug',
-                //     categoryId: '$categoryId',
-                //     description: '$description',
-                //     thumbnail: '$thumbnail',
-                //     likeCount: '$likeCount',
-                //     createdAt: '$createdAt',
-                //     countSong: { $size: `$${unwindSong}` },
-                //     userId: '$userId',
-                //     artistName: `$${unwindUser}.artistName`,
-                // },
-            },
-        })
-        .project({
-            _id: 0,
-            categoryId: '$_id._id',
-            categoryName: '$_id.name',
-            categorySlug: '$_id.slug',
-            count: { $size: '$data' },
-            data: '$data',
-        })
-        .sort({ categoryName: 'asc' })
+        .group(group)
+        .project(project)
+        .sort(sort)
         .exec()
         .then((data) => {
             playlists = data
@@ -122,22 +111,70 @@ const getPlaylists = asyncHandler(async (req, res) => {
 })
 
 // @desc    Get playlists for page
-// @route   GET /api/playlists/query
+// @route   GET /api/playlists/get?page=x&limit=x&name=x
 // @access  Public
 const getPlaylistsForPage = asyncHandler(async (req, res) => {
-    const { page = 1, limit = 8 } = req.query
+    const { page, limit, name = '' } = req.query
+    const pageNumber = +page,
+        limitNumber = +limit
 
-    const count = await Playlist.find().count()
+    let playlists
+    let match
 
-    const start = (+page - 1) * +limit
-    const end = +page * +limit > count ? count : +page * +limit
+    if (name) {
+        match = {
+            search: { $regex: name, $options: 'i' },
+            $expr: { $gt: [{ $size: `$${unwindSong}` }, 0] },
+        }
+    } else {
+        match = {
+            $expr: { $gt: [{ $size: `$${unwindSong}` }, 0] },
+        }
+    }
 
-    const playlists = await Playlist.aggregate()
-        .lookup(lookupUser)
-        .unwind(unwindUser)
-        .project(columnPlaylistReturn)
-        .skip(start)
-        .limit(end)
+    const sort = {
+        likeCount: 'desc',
+    }
+
+    if (limitNumber) {
+        const start = limitNumber ? (pageNumber - 1) * limitNumber : 1
+
+        await Playlist.aggregate()
+            .lookup(lookupPlaylistToSong)
+            .lookup(lookupPlaylistToUser)
+            .unwind(unwindUser)
+            .match(match)
+            .project(projectPlaylist)
+            .sort(sort)
+            .skip(start)
+            .limit(limitNumber)
+            .exec()
+            .then((data) => {
+                playlists = data
+            })
+            .catch((e) => {
+                console.log(e)
+                res.status(400)
+                throw new Error('Playlist không tồn tại')
+            })
+    } else {
+        await Playlist.aggregate()
+            .lookup(lookupPlaylistToSong)
+            .lookup(lookupPlaylistToUser)
+            .unwind(unwindUser)
+            .match(match)
+            .project(projectPlaylist)
+            .sort(sort)
+            .exec()
+            .then((data) => {
+                playlists = data
+            })
+            .catch((e) => {
+                console.log(e)
+                res.status(400)
+                throw new Error('Playlist không tồn tại')
+            })
+    }
 
     res.status(200).json(playlists)
 })
@@ -145,49 +182,57 @@ const getPlaylistsForPage = asyncHandler(async (req, res) => {
 // @desc    Get playlists by name
 // @route   GET /api/playlists/search
 // @access  Public
-const getPlaylistsByName = asyncHandler(async (req, res) => {
-    const playlists = await Playlist.aggregate()
-        .lookup(lookupPlaylistToSong)
-        .lookup(lookupPlaylistToUser)
-        .unwind(unwindUser)
-        .match({ search: { $regex: req.query.name, $options: 'i' } })
-        .project(columnPlaylistReturn)
-
-    res.status(200).json(playlists)
-})
+// const getPlaylistsByName = asyncHandler(async (req, res) => {
+// const playlists = await Playlist.aggregate()
+//     .lookup(lookupPlaylistToSong)
+//     .lookup(lookupPlaylistToUser)
+//     .unwind(unwindUser)
+//     .match({ search: { $regex: req.query.name, $options: 'i' } })
+//     .project(columnPlaylistReturn)
+// res.status(200).json(playlists)
+// })
 
 // @desc    Get top playlists
 // @route   GET /api/playlists/top
 // @access  Public
-const getTopPlaylistsFavourite = asyncHandler(async (req, res) => {
-    // const top = req.query.top || process.env.TOP_PLAYLIST
-    const top = Number.parseInt(req.query.top) || null
-
-    const playlists = await Playlist.aggregate()
-        .lookup(lookupPlaylistToUser)
-        .lookup(lookupPlaylistToSong)
-        .unwind(unwindUser)
-        .match({ $expr: { $gt: [{ $size: `$${unwindSong}` }, 0] } })
-        .project(columnPlaylistReturn)
-        .sort({ likeCount: 'desc' })
-        .limit(top)
-
-    res.status(200).json(playlists)
-})
+// const getTopPlaylistsFavourite = asyncHandler(async (req, res) => {
+// const top = req.query.top || process.env.TOP_PLAYLIST
+// const top = Number.parseInt(req.query.top) || null
+// const playlists = await Playlist.aggregate()
+//     .lookup(lookupPlaylistToUser)
+//     .lookup(lookupPlaylistToSong)
+//     .unwind(unwindUser)
+//     .match({ $expr: { $gt: [{ $size: `$${unwindSong}` }, 0] } })
+//     .project(columnPlaylistReturn)
+//     .sort({ likeCount: 'desc' })
+//     .limit(top)
+// res.status(200).json(playlists)
+// })
 
 // @desc    Get playlists by userId
-// @route   GET /api/playlists/getByUser?userId=x
+// @route   GET /api/playlists/getPlaylistsByUserId?userId=x
 // @access  Public
 const getByUserId = asyncHandler(async (req, res) => {
+    const userId = req.query.userId
     let playlists
+
+    const match = {
+        userId: new objectId(userId),
+        $expr: { $gt: [{ $size: `$${unwindSong}` }, 0] },
+    }
+
+    const sort = {
+        likeCount: 'desc',
+        createdAt: 'desc',
+    }
+
     await Playlist.aggregate()
-        .lookup(lookupPlaylistToUser)
         .lookup(lookupPlaylistToSong)
+        .lookup(lookupPlaylistToUser)
         .unwind(unwindUser)
-        .match({ userId: new objectId(req.query.userId) })
-        .match({ $expr: { $gt: [{ $size: `$${unwindSong}` }, 0] } })
-        .project(columnPlaylistReturn)
-        .sort({ likeCount: 'desc', createdAt: 'desc' })
+        .match(match)
+        .project(projectPlaylist)
+        .sort(sort)
         .exec()
         .then((data) => {
             playlists = data
@@ -205,203 +250,244 @@ const getByUserId = asyncHandler(async (req, res) => {
 // @route   GET /api/playlists/getByCategory?categoryId=x&page=x&limit=x
 // @access  Public
 const getPlaylistsByCategoryId = asyncHandler(async (req, res) => {
-    const { categoryId, page = 1, limit = 16, name } = req.query
+    const { categoryId, page, limit, name = '' } = req.query
+    const pageNumber = +page,
+        limitNumber = +limit
 
-    let playlists
+    let category = {}
+    let playlists = []
+    let pagination = {}
+
+    let dataReturn
+
+    let match
     if (name) {
-        // const count = await Playlist.find({
-        //     categoryId: new objectId(categoryId),
-        //     search: { $regex: name, $options: 'i' },
-        // }).count()
+        match = {
+            categoryId: new objectId(categoryId),
+            $expr: { $gt: [{ $size: `$${unwindSong}` }, 0] },
+            search: { $regex: name, $options: 'i' },
+        }
+    } else {
+        match = {
+            categoryId: new objectId(categoryId),
+            $expr: { $gt: [{ $size: `$${unwindSong}` }, 0] },
+        }
+    }
 
-        const start = (+page - 1) * +limit
-        // const end = +page * +limit > count ? count : +page * +limit
+    const project = {
+        _id: 0,
+        id: '$_id',
+        name: '$name',
+        slug: '$slug',
+        categoryId: '$categoryId',
+        description: '$description',
+        thumbnail: '$thumbnail',
+        likeCount: '$likeCount',
+        createdAt: '$createdAt',
+        countSong: { $size: `$${unwindSong}` },
+        userId: '$userId',
+        artistName: `$${unwindUser}.artistName`,
+    }
 
-        // const pagination = {
-        //     page: +page,
-        //     limit: +limit,
-        //     totalRows: count,
-        //     totalPages: Math.ceil(count / limit),
-        // }
+    category = await Category.findById(categoryId).select('name')
 
+    let count = 0
+    await Playlist.aggregate()
+        .lookup(lookupPlaylistToSong)
+        .lookup(lookupPlaylistToUser)
+        .unwind(unwindUser)
+        .match(match)
+        .count('count')
+        .exec()
+        .then((data) => {
+            count = data[0].count
+        })
+        .catch((error) => {
+            console.log(error)
+            count = 0
+        })
+
+    let start, newLimit
+
+    if (!pageNumber && limitNumber) {
+        start = 0
+        newLimit = limitNumber
+    } else if (pageNumber && limitNumber) {
+        start = (pageNumber - 1) * limitNumber
+        newLimit = limitNumber
+    } else {
+        start = 0
+        newLimit = count
+    }
+
+    // if (!pageNumber && !limitNumber) {
+    //     start = 0
+    //     newLimit = count
+    // } else if (pageNumber && !limitNumber) {
+    //     start = 0
+    //     newLimit = count
+    // } else if (!pageNumber && limitNumber) {
+    //     start = 0
+    //     newLimit = limitNumber
+    // } else if (pageNumber && limitNumber) {
+    //     start = (pageNumber - 1) * limitNumber
+    //     newLimit = limitNumber
+    // }
+
+    let countWithLimit
+    await Playlist.aggregate()
+        .lookup(lookupPlaylistToSong)
+        .lookup(lookupPlaylistToUser)
+        .unwind(unwindUser)
+        .skip(start)
+        .limit(newLimit)
+        .match(match)
+        .count('count')
+        .exec()
+        .then((data) => {
+            countWithLimit = data[0].count
+        })
+        .catch((error) => {
+            console.log(error)
+            countWithLimit = 0
+        })
+
+    if (count === 0 || countWithLimit === 0) {
+        playlists = []
+        pagination = {
+            page: 1,
+            limit: limitNumber,
+            totalRows: count,
+        }
+        dataReturn = {
+            category,
+            playlists,
+            pagination,
+        }
+        return res.status(200).json(dataReturn)
+    }
+
+    if (limitNumber && countWithLimit !== 0) {
         await Playlist.aggregate()
-            .lookup(lookupPlaylistToCategory)
             .lookup(lookupPlaylistToSong)
             .lookup(lookupPlaylistToUser)
-            .unwind(unwindCategory)
             .unwind(unwindUser)
-            .match({ categoryId: new objectId(categoryId), search: { $regex: name, $options: 'i' } })
+            .match(match)
+            .project(project)
             .skip(start)
-            .limit(+limit)
-            .group({
-                _id: `$${unwindCategory}`,
-                data: {
-                    $push: {
-                        $cond: [
-                            { $gt: [{ $size: `$${unwindSong}` }, 0] },
-                            {
-                                id: '$_id',
-                                name: '$name',
-                                slug: '$slug',
-                                categoryId: '$categoryId',
-                                description: '$description',
-                                thumbnail: '$thumbnail',
-                                likeCount: '$likeCount',
-                                createdAt: '$createdAt',
-                                countSong: { $size: `$${unwindSong}` },
-                                userId: '$userId',
-                                artistName: `$${unwindUser}.artistName`,
-                            },
-                            '$$REMOVE',
-                        ],
-                    },
-                    // $push: {
-                    //     id: '$_id',
-                    //     name: '$name',
-                    //     slug: '$slug',
-                    //     categoryId: '$categoryId',
-                    //     description: '$description',
-                    //     thumbnail: '$thumbnail',
-                    //     likeCount: '$likeCount',
-                    //     createdAt: '$createdAt',
-                    //     countSong: { $size: `$${unwindSong}` },
-                    //     userId: '$userId',
-                    //     artistName: `$${unwindUser}.artistName`,
-                    // },
-                },
-            })
-            .project({
-                _id: 0,
-                categoryId: '$_id._id',
-                categoryName: '$_id.name',
-                categorySlug: '$_id.slug',
-                count: { $size: '$data' },
-                data: '$data',
-            })
-            .sort({ categoryName: 'asc' })
-            .addFields({
-                pagination: {
-                    page: +page,
-                    limit: +limit,
-                    totalRows: { $size: '$data' },
-                    // totalPages: Math.ceil(count / limit),
-                },
-            })
+            .limit(newLimit)
             .exec()
             .then((data) => {
-                playlists = data[0]
+                playlists = data
             })
             .catch((error) => {
                 console.log(error)
                 res.status(400)
-                throw new Error('Thể loại này không tồn tại')
+                throw new Error('Có lỗi xảy ra')
             })
-    } else {
-        // const count = await Playlist.find({ categoryId: new objectId(categoryId) }).count()
 
-        const start = (+page - 1) * +limit
-        // const end = +page * +limit > count ? +page * +limit : count
+        pagination = {
+            page: pageNumber,
+            limit: limitNumber,
+            totalRows: count,
+        }
 
-        // const pagination = {
-        //     page: +page,
-        //     limit: +limit,
-        //     totalRows: count,
-        //     totalPages: Math.ceil(count / limit),
-        // }
-
-        await Playlist.aggregate()
-            .lookup(lookupPlaylistToCategory)
-            .lookup(lookupPlaylistToSong)
-            .lookup(lookupPlaylistToUser)
-            .unwind(unwindCategory)
-            .unwind(unwindUser)
-            .match({ categoryId: new objectId(categoryId) })
-            .skip(start)
-            .limit(+limit)
-            .group({
-                _id: `$${unwindCategory}`,
-                data: {
-                    $push: {
-                        $cond: [
-                            { $gt: [{ $size: `$${unwindSong}` }, 0] },
-                            {
-                                id: '$_id',
-                                name: '$name',
-                                slug: '$slug',
-                                categoryId: '$categoryId',
-                                description: '$description',
-                                thumbnail: '$thumbnail',
-                                likeCount: '$likeCount',
-                                createdAt: '$createdAt',
-                                countSong: { $size: `$${unwindSong}` },
-                                userId: '$userId',
-                                artistName: `$${unwindUser}.artistName`,
-                            },
-                            '$$REMOVE',
-                        ],
-                    },
-                    // $push: {
-                    //     id: '$_id',
-                    //     name: '$name',
-                    //     slug: '$slug',
-                    //     categoryId: '$categoryId',
-                    //     description: '$description',
-                    //     thumbnail: '$thumbnail',
-                    //     likeCount: '$likeCount',
-                    //     createdAt: '$createdAt',
-                    //     countSong: { $size: `$${unwindSong}` },
-                    //     userId: '$userId',
-                    //     artistName: `$${unwindUser}.artistName`,
-                    // },
-                },
-            })
-            .project({
-                _id: 0,
-                categoryId: '$_id._id',
-                categoryName: '$_id.name',
-                categorySlug: '$_id.slug',
-                count: { $size: '$data' },
-                data: '$data',
-            })
-            .sort({ categoryName: 'asc' })
-            .addFields({
-                pagination: {
-                    page: +page,
-                    limit: +limit,
-                    totalRows: { $size: '$data' },
-                    // totalPages: Math.ceil(count / limit),
-                },
-            })
-            .exec()
-            .then((data) => {
-                playlists = data[0]
-            })
-            .catch((error) => {
-                console.log(error)
-                throw new Error('Thể loại này không tồn tại')
-            })
+        dataReturn = {
+            category,
+            playlists,
+            pagination,
+        }
+        return res.status(200).json(dataReturn)
     }
 
-    res.status(200).json(playlists)
+    await Playlist.aggregate()
+        .lookup(lookupPlaylistToSong)
+        .lookup(lookupPlaylistToUser)
+        .unwind(unwindUser)
+        .match(match)
+        .project(project)
+        .exec()
+        .then((data) => {
+            playlists = data
+        })
+        .catch((error) => {
+            console.log(error)
+            res.status(400)
+            throw new Error('Có lỗi xảy ra')
+        })
+
+    pagination = {
+        page: 1,
+        limit: limitNumber,
+        totalRows: count,
+    }
+
+    dataReturn = {
+        category,
+        playlists,
+        pagination,
+    }
+
+    return res.status(200).json(dataReturn)
+
+    // const group = {
+    //     _id: `$${unwindCategory}`,
+    //     data: {
+    //         $push: {
+    //             $cond: [
+    //                 { $gt: [{ $size: `$${unwindSong}` }, 0] },
+    //                 {
+    //                     id: '$_id',
+    //                     name: '$name',
+    //                     slug: '$slug',
+    //                     categoryId: '$categoryId',
+    //                     description: '$description',
+    //                     thumbnail: '$thumbnail',
+    //                     likeCount: '$likeCount',
+    //                     createdAt: '$createdAt',
+    //                     countSong: { $size: `$${unwindSong}` },
+    //                     userId: '$userId',
+    //                     artistName: `$${unwindUser}.artistName`,
+    //                 },
+    //                 '$$REMOVE',
+    //             ],
+    //         },
+    //     },
+    // }
+
+    // const project = {
+    //     _id: 0,
+    //     categoryId: '$_id._id',
+    //     categoryName: '$_id.name',
+    //     categorySlug: '$_id.slug',
+    //     count: { $size: '$data' },
+    //     data: '$data',
+    // }
 })
 
 // @desc    Get playlist by id
 // @route   GET /api/playlists/:id
 // @access  Public
 const getPlaylistById = asyncHandler(async (req, res) => {
+    const playlistId = req.params.id
     let playlist
+
+    const match = {
+        _id: new objectId(playlistId),
+    }
+
     await Playlist.aggregate()
-        .lookup(lookupPlaylistToUser)
         .lookup(lookupPlaylistToSong)
+        .lookup(lookupPlaylistToUser)
         .unwind(unwindUser)
-        .match({ _id: new objectId(req.params.id) })
-        .project(columnPlaylistReturn)
+        .match(match)
+        .project(projectPlaylist)
         .exec()
         .then((data) => {
             playlist = data[0]
         })
-        .catch((e) => {
-            console.log(e)
+        .catch((error) => {
+            console.log(error)
             res.status(400)
             throw new Error('Playlist không tồn tại')
         })
@@ -425,13 +511,4 @@ const likePlaylist = asyncHandler(async (req, res) => {
     }
 })
 
-export {
-    getPlaylists,
-    getPlaylistsForPage,
-    getPlaylistsByName,
-    getTopPlaylistsFavourite,
-    getByUserId,
-    getPlaylistsByCategoryId,
-    getPlaylistById,
-    likePlaylist,
-}
+export { getPlaylists, getPlaylistsForPage, getByUserId, getPlaylistsByCategoryId, getPlaylistById, likePlaylist }

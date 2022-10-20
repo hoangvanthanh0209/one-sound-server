@@ -95,9 +95,7 @@ const getUsers = asyncHandler(async (req, res) => {
         const count = await User.find({
             search: { $regex: name, $options: 'i' },
             role: process.env.USER_ROLE,
-        })
-            .select(process.env.USER_INFO)
-            .count()
+        }).count()
 
         await User.aggregate([match, project, skip, limitCond, sort])
             .exec()
@@ -116,7 +114,7 @@ const getUsers = asyncHandler(async (req, res) => {
             totalRows: users.length ? count : 0,
         }
     } else {
-        await User.aggregate([match, sort, project])
+        await User.aggregate([match, project, sort])
             .exec()
             .then((data) => {
                 users = data
@@ -141,33 +139,6 @@ const getUsers = asyncHandler(async (req, res) => {
 
     res.status(200).json(dataReturn)
 })
-
-// @desc    Get user by name
-// @route   GET /api/users/search
-// @access  Public
-// const getUserByName = asyncHandler(async (req, res) => {
-//     const userList = await User.find({
-//         search: { $regex: req.query.name, $options: 'i' },
-//         role: process.env.USER_ROLE,
-//     }).select(process.env.USER_INFO)
-
-//     res.status(200).json(userList)
-// })
-
-// @desc    Get top user favourite
-// @route   GET /api/users/top
-// @access  Public
-// const getTopUsersFavourite = asyncHandler(async (req, res) => {
-//     // const top = req.query.top || process.env.TOP_USER
-//     const top = Number.parseInt(req.query.top) || null
-
-//     const users = await User.find({ role: process.env.USER_ROLE })
-//         .select(process.env.USER_INFO)
-//         .sort({ likeCount: 'desc' })
-//         .limit(top)
-
-//     res.status(200).json(users)
-// })
 
 // @desc    Get user by id
 // @route   GET /api/users/:userId
@@ -377,8 +348,6 @@ const generateToken = (id) => {
 export {
     getUserList,
     getUsers,
-    // getUserByName,
-    // getTopUsersFavourite,
     getUserById,
     resgiter,
     login,

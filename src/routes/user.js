@@ -2,8 +2,6 @@ import express from 'express'
 import {
     getUserList,
     getUsers,
-    // getUserByName,
-    // getTopUsersFavourite,
     getUserById,
     resgiter,
     login,
@@ -21,8 +19,6 @@ const router = express.Router()
 // [api/users]
 router.get('/', auth.protectAdmin, getUserList)
 router.get('/get', getUsers) // get?page=x&limit=x&name=x&typeSort=x
-// router.get('/search', getUserByName)
-// router.get('/top', getTopUsersFavourite)
 router.get('/:userId', getUserById)
 router.post('/', upload.single('avatar'), resgiter)
 router.post('/login', login)

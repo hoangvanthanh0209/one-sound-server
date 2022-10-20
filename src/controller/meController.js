@@ -11,6 +11,25 @@ import { uploadImage, deleteImage, uploadMp3, deleteMp3 } from '../utils/cloundi
 
 dotenv.config()
 
+const objectId = mongoose.Types.ObjectId
+
+const slugifyOptions = {
+    replacement: '-',
+    remove: undefined,
+    lower: true,
+    strict: false,
+    locale: 'vi',
+    trim: true,
+}
+const slugifyOptionsSearch = {
+    replacement: ' ',
+    remove: undefined,
+    lower: true,
+    strict: false,
+    locale: 'vi',
+    trim: true,
+}
+
 const unwindUser = 'userData'
 const unwindPlaylist = 'playlistData'
 const unwindSong = 'songData'
@@ -47,7 +66,7 @@ const lookupPlaylistToUser = {
     as: unwindUser,
 }
 
-const columnSongReturn = {
+const projectSong = {
     _id: 0,
     id: '$_id',
     name: '$name',
@@ -61,7 +80,7 @@ const columnSongReturn = {
     artistName: `$${unwindUser}.artistName`,
     playlistName: `$${unwindPlaylist}.name`,
 }
-const columnPlaylistReturn = {
+const projectPlaylist = {
     _id: 0,
     id: '$_id',
     name: '$name',
@@ -75,76 +94,36 @@ const columnPlaylistReturn = {
     categoryName: `$${unwindCategory}.name`,
 }
 
-const objectId = mongoose.Types.ObjectId
-
-const slugifyOptions = {
-    replacement: '-',
-    remove: undefined,
-    lower: true,
-    strict: false,
-    locale: 'vi',
-    trim: true,
-}
-
-const slugifyOptionsSearch = {
-    replacement: ' ',
-    remove: undefined,
-    lower: true,
-    strict: false,
-    locale: 'vi',
-    trim: true,
-}
-
-// @desc    Get user data
-// @route   GET /api/me
-// @access  Private
-const getMe = asyncHandler(async (req, res) => {
-    const { _id, name, slug, artistName, avatar, description, likeCount } = await User.findById(req.user.id)
-
-    res.status(200).json({
-        id: _id,
-        name,
-        slug,
-        artistName,
-        avatar,
-        description,
-        likeCount,
-    })
-})
-
 // @desc    Get playlists of user
-// @route   GET /api/me/playlist
+// @route   GET /api/me/playlist?page=x&limit=x&name=x
 // @access  Private
 const getPlaylists = asyncHandler(async (req, res) => {
-    const playlists = await Playlist.aggregate()
-        .lookup(lookupPlaylistToSong)
-        .lookup(lookupPlaylistToCategory)
-        .match({ userId: new objectId(req.user.id) })
-        .unwind(unwindCategory)
-        .project(columnPlaylistReturn)
-
-    res.status(200).json(playlists)
-})
-
-// @desc    Get playlists of user for page
-// @route   GET /api/me/playlist/get?page=x&limit=x
-// @access  Private
-const getPlaylistsForPage = asyncHandler(async (req, res) => {
-    const { page, limit } = req.query
+    const { page, limit, name = '' } = req.query
+    const pageNumber = +page,
+        limitNumber = +limit
     let playlists
+    let pagination
 
-    if (limit) {
-        const start = (+page - 1) * +limit
-        const count = await Playlist.find({ userId: new objectId(req.user.id) }).count()
+    let match
+    if (name) {
+        match = { userId: new objectId(req.user.id), search: { $regex: name, $options: 'i' } }
+    } else {
+        match = { userId: new objectId(req.user.id) }
+    }
+
+    const count = await Playlist.find(match).count()
+
+    if (limitNumber) {
+        const start = pageNumber ? (pageNumber - 1) * limitNumber : 0
+
         await Playlist.aggregate()
             .lookup(lookupPlaylistToSong)
             .lookup(lookupPlaylistToCategory)
-            .match({ userId: new objectId(req.user.id) })
             .unwind(unwindCategory)
-            .project(columnPlaylistReturn)
-            .sort({ likeCount: 'desc', name: 'asc' })
+            .match(match)
+            .project(projectPlaylist)
             .skip(start)
-            .limit(+limit)
+            .limit(limitNumber)
             .exec()
             .then((data) => {
                 playlists = data
@@ -152,28 +131,22 @@ const getPlaylistsForPage = asyncHandler(async (req, res) => {
             .catch((error) => {
                 console.log(error)
                 res.status(400)
-                throw new Error(error)
+                throw new Error('Có lỗi xảy ra')
             })
 
-        const dataReturn = {
-            data: playlists,
-            pagination: {
-                page: +page,
-                limit: +limit,
-                totalRows: count,
-                // totalPages: Math.ceil(count / limit),
-            },
+        pagination = {
+            page: pageNumber || 1,
+            limit: limitNumber,
+            count: playlists.length,
+            totalRows: playlists.length ? count : 0,
         }
-
-        res.status(200).json(dataReturn)
     } else {
         await Playlist.aggregate()
             .lookup(lookupPlaylistToSong)
             .lookup(lookupPlaylistToCategory)
-            .match({ userId: new objectId(req.user.id) })
             .unwind(unwindCategory)
-            .project(columnPlaylistReturn)
-            .sort({ likeCount: 'desc', name: 'asc' })
+            .match(match)
+            .project(projectPlaylist)
             .exec()
             .then((data) => {
                 playlists = data
@@ -181,121 +154,457 @@ const getPlaylistsForPage = asyncHandler(async (req, res) => {
             .catch((error) => {
                 console.log(error)
                 res.status(400)
-                throw new Error(error)
+                throw new Error('Có lỗi xảy ra')
             })
 
-        res.status(200).json(playlists)
+        pagination = {
+            page: 1,
+            limit: playlists.length,
+            count: playlists.length,
+            totalRows: playlists.length,
+        }
     }
-})
-
-// @desc    Get playlist by id
-// @route   GET /api/me/playlist/:pId
-// @access  Private
-const getPlaylistById = asyncHandler(async (req, res) => {
-    let playlist
-    await Playlist.aggregate()
-        .lookup(lookupPlaylistToSong)
-        .match({ _id: new objectId(req.params.pId), userId: new objectId(req.user.id) })
-        .project(columnPlaylistReturn)
-        .exec()
-        .then((data) => {
-            playlist = data[0]
-        })
-        .catch((e) => {
-            console.log(e)
-            res.status(400)
-            throw new Error('Playlist không tồn tại')
-        })
-
-    res.status(200).json(playlist)
-})
-
-// @desc    Get songs of playlist
-// @route   GET /api/me/playlist/getInfoAndSong?playlistId=x
-// @access  Private
-const getInfoAndSong = asyncHandler(async (req, res) => {
-    let playlist
-    let songs = []
-    const playlistId = req.query.playlistId
-    await Playlist.aggregate()
-        .lookup(lookupPlaylistToSong)
-        .match({ _id: new objectId(playlistId), userId: new objectId(req.user.id) })
-        .project(columnPlaylistReturn)
-        .exec()
-        .then((data) => {
-            playlist = data[0]
-        })
-        .catch((e) => {
-            console.log(e)
-            res.status(400)
-            throw new Error('Playlist không tồn tại')
-        })
-
-    await Song.aggregate()
-        .lookup(lookupSongToUser)
-        .lookup(lookupSongToPlaylist)
-        .match({ playlistId: new objectId(playlistId) })
-        .unwind(unwindUser)
-        .unwind(unwindPlaylist)
-        .project(columnSongReturn)
-        .exec()
-        .then((data) => {
-            songs = data
-        })
-        .catch((error) => {
-            console.log(error)
-            res.status(400)
-            throw new Error('Playlist không tồn tại')
-        })
 
     const dataReturn = {
-        playlist,
-        songs,
+        data: playlists,
+        pagination,
     }
 
     res.status(200).json(dataReturn)
 })
 
+// @desc    Get playlists of user for page
+// @route   GET /api/me/playlist/get?page=x&limit=x
+// @access  Private
+const getSongsByPlaylistId = asyncHandler(async (req, res) => {
+    const { playlistId, page, limit, name = '' } = req.query
+    const pageNumber = +page,
+        limitNumber = +limit
+
+    let playlist = {}
+    let songs = []
+    let pagination = {}
+
+    let match
+    if (name) {
+        match = {
+            search: { $regex: name, $options: 'i' },
+            playlistId: new objectId(playlistId),
+        }
+    } else {
+        match = {
+            playlistId: new objectId(playlistId),
+        }
+    }
+
+    const project = {
+        _id: 0,
+        id: '$_id',
+        name: '$name',
+        slug: '$slug',
+        singer: '$singer',
+        year: '$year',
+        thumbnail: '$thumbnail',
+        mp3: '$mp3',
+        likeCount: '$likeCount',
+        userId: '$userId',
+        playlistId: '$playlistId',
+        createdAt: '$createdAt',
+        playlistName: `$${unwindPlaylist}.name`,
+        artistName: `$${unwindUser}.artistName`,
+        artistSlug: `$${unwindUser}.slug`,
+    }
+
+    // const group = {
+    //     _id: `$${unwindPlaylist}`,
+    //     songs: {
+    //         $push: {
+    //             id: '$_id',
+    //             name: '$name',
+    //             slug: '$slug',
+    //             singer: '$singer',
+    //             year: '$year',
+    //             thumbnail: '$thumbnail',
+    //             mp3: '$mp3',
+    //             likeCount: '$likeCount',
+    //             userId: '$userId',
+    //             playlistId: '$playlistId',
+    //             createdAt: '$createdAt',
+    //             playlistName: `$${unwindPlaylist}.name`,
+    //             artistName: `$${unwindUser}.artistName`,
+    //             artistSlug: `$${unwindUser}.slug`,
+    //         },
+    //     },
+    // }
+    // const project = {
+    //     _id: 0,
+    //     playlist: {
+    //         id: '$_id._id',
+    //         name: '$_id.name',
+    //         slug: '$_id.slug',
+    //         thumbnail: '$_id.thumbnail',
+    //         likeCount: '$_id.likeCount',
+    //     },
+    //     songs: '$songs',
+    // }
+
+    const count = await Song.find(match).count()
+
+    playlist = await Playlist.findById(playlistId).select('name slug thumbnail likeCount')
+
+    if (count === 0) {
+        songs = []
+        pagination = {
+            page: 1,
+            limit: limitNumber,
+            totalRows: count,
+        }
+    } else if (count === 1) {
+        await Song.aggregate()
+            .lookup(lookupSongToUser)
+            .lookup(lookupSongToPlaylist)
+            .unwind(unwindUser)
+            .unwind(unwindPlaylist)
+            .match(match)
+            .project(project)
+            .exec()
+            .then((data) => {
+                songs = data
+            })
+            .catch((error) => {
+                console.log(error)
+                res.status(400)
+                throw new Error('Có lỗi xảy ra')
+            })
+
+        pagination = {
+            page: 1,
+            limit: limitNumber,
+            totalRows: count,
+        }
+    } else {
+        if (limitNumber) {
+            const project = {
+                _id: 0,
+                id: '$_id',
+                name: '$name',
+                slug: '$slug',
+                singer: '$singer',
+                year: '$year',
+                thumbnail: '$thumbnail',
+                mp3: '$mp3',
+                likeCount: '$likeCount',
+                userId: '$userId',
+                playlistId: '$playlistId',
+                createdAt: '$createdAt',
+                playlistName: `$${unwindPlaylist}.name`,
+                artistName: `$${unwindUser}.artistName`,
+                artistSlug: `$${unwindUser}.slug`,
+            }
+
+            let countAfterGroup
+
+            const start = pageNumber ? (pageNumber - 1) * limitNumber : 0
+
+            await Song.aggregate()
+                .lookup(lookupSongToUser)
+                .lookup(lookupSongToPlaylist)
+                .unwind(unwindUser)
+                .unwind(unwindPlaylist)
+                .match(match)
+                .skip(start)
+                .limit(limitNumber)
+                .count('count')
+                .exec()
+                .then((data) => {
+                    countAfterGroup = data[0].count
+                })
+                .catch((error) => {
+                    console.log(error)
+                    countAfterGroup = 0
+                })
+
+            if (countAfterGroup === 0) {
+                songs = []
+                pagination = {
+                    page: 1,
+                    limit: limitNumber,
+                    totalRows: count,
+                }
+            } else if (countAfterGroup === 1) {
+                await Song.aggregate()
+                    .lookup(lookupSongToUser)
+                    .lookup(lookupSongToPlaylist)
+                    .unwind(unwindUser)
+                    .unwind(unwindPlaylist)
+                    .match(match)
+                    .project(project)
+                    .skip(start)
+                    .limit(limitNumber)
+                    .exec()
+                    .then((data) => {
+                        songs = data
+                    })
+                    .catch((error) => {
+                        console.log(error)
+                        res.status(400)
+                        throw new Error('Có lỗi xảy ra')
+                    })
+
+                pagination = {
+                    page: pageNumber,
+                    limit: limitNumber,
+                    totalRows: count,
+                }
+            } else {
+                await Song.aggregate()
+                    .lookup(lookupSongToUser)
+                    .lookup(lookupSongToPlaylist)
+                    .unwind(unwindUser)
+                    .unwind(unwindPlaylist)
+                    .match(match)
+                    .project(project)
+                    .skip(start)
+                    .limit(limitNumber)
+                    .exec()
+                    .then((data) => {
+                        songs = data
+                    })
+                    .catch((error) => {
+                        console.log(error)
+                        res.status(400)
+                        throw new Error('Có lỗi xảy ra')
+                    })
+
+                pagination = {
+                    page: pageNumber,
+                    limit: limitNumber,
+                    totalRows: count,
+                }
+            }
+        } else {
+            const project = {
+                _id: 0,
+                id: '$_id',
+                name: '$name',
+                slug: '$slug',
+                singer: '$singer',
+                year: '$year',
+                thumbnail: '$thumbnail',
+                mp3: '$mp3',
+                likeCount: '$likeCount',
+                userId: '$userId',
+                playlistId: '$playlistId',
+                createdAt: '$createdAt',
+                playlistName: `$${unwindPlaylist}.name`,
+                artistName: `$${unwindUser}.artistName`,
+                artistSlug: `$${unwindUser}.slug`,
+            }
+
+            await Song.aggregate()
+                .lookup(lookupSongToUser)
+                .lookup(lookupSongToPlaylist)
+                .unwind(unwindUser)
+                .unwind(unwindPlaylist)
+                .match(match)
+                .project(project)
+                .exec()
+                .then((data) => {
+                    songs = data
+                })
+                .catch((error) => {
+                    console.log(error)
+                    res.status(400)
+                    throw new Error('Có lỗi xảy ra')
+                })
+
+            pagination = {
+                page: 1,
+                limit: count,
+                totalRows: count,
+            }
+        }
+    }
+
+    const dataReturn = {
+        playlist,
+        songs,
+        pagination,
+    }
+
+    res.status(200).json(dataReturn)
+})
+
+// @desc    Get playlists of user for page
+// @route   GET /api/me/playlist/get?page=x&limit=x
+// @access  Private
+// const getPlaylistsForPage = asyncHandler(async (req, res) => {
+//     const { page, limit } = req.query
+//     let playlists
+
+//     if (limit) {
+//         const start = (+page - 1) * +limit
+//         const count = await Playlist.find({ userId: new objectId(req.user.id) }).count()
+//         await Playlist.aggregate()
+//             .lookup(lookupPlaylistToSong)
+//             .lookup(lookupPlaylistToCategory)
+//             .match({ userId: new objectId(req.user.id) })
+//             .unwind(unwindCategory)
+//             .project(columnPlaylistReturn)
+//             .sort({ likeCount: 'desc', name: 'asc' })
+//             .skip(start)
+//             .limit(+limit)
+//             .exec()
+//             .then((data) => {
+//                 playlists = data
+//             })
+//             .catch((error) => {
+//                 console.log(error)
+//                 res.status(400)
+//                 throw new Error(error)
+//             })
+
+//         const dataReturn = {
+//             data: playlists,
+//             pagination: {
+//                 page: +page,
+//                 limit: +limit,
+//                 totalRows: count,
+//                 // totalPages: Math.ceil(count / limit),
+//             },
+//         }
+
+//         res.status(200).json(dataReturn)
+//     } else {
+//         await Playlist.aggregate()
+//             .lookup(lookupPlaylistToSong)
+//             .lookup(lookupPlaylistToCategory)
+//             .match({ userId: new objectId(req.user.id) })
+//             .unwind(unwindCategory)
+//             .project(columnPlaylistReturn)
+//             .sort({ likeCount: 'desc', name: 'asc' })
+//             .exec()
+//             .then((data) => {
+//                 playlists = data
+//             })
+//             .catch((error) => {
+//                 console.log(error)
+//                 res.status(400)
+//                 throw new Error(error)
+//             })
+
+//         res.status(200).json(playlists)
+//     }
+// })
+
+// @desc    Get playlist by id
+// @route   GET /api/me/playlist/:pId
+// @access  Private
+// const getPlaylistById = asyncHandler(async (req, res) => {
+//     let playlist
+//     await Playlist.aggregate()
+//         .lookup(lookupPlaylistToSong)
+//         .match({ _id: new objectId(req.params.pId), userId: new objectId(req.user.id) })
+//         .project(columnPlaylistReturn)
+//         .exec()
+//         .then((data) => {
+//             playlist = data[0]
+//         })
+//         .catch((e) => {
+//             console.log(e)
+//             res.status(400)
+//             throw new Error('Playlist không tồn tại')
+//         })
+
+//     res.status(200).json(playlist)
+// })
+
+// @desc    Get songs of playlist
+// @route   GET /api/me/playlist/getInfoAndSong?playlistId=x
+// @access  Private
+// const getInfoAndSong = asyncHandler(async (req, res) => {
+//     let playlist
+//     let songs = []
+//     const playlistId = req.query.playlistId
+//     await Playlist.aggregate()
+//         .lookup(lookupPlaylistToSong)
+//         .match({ _id: new objectId(playlistId), userId: new objectId(req.user.id) })
+//         .project(columnPlaylistReturn)
+//         .exec()
+//         .then((data) => {
+//             playlist = data[0]
+//         })
+//         .catch((e) => {
+//             console.log(e)
+//             res.status(400)
+//             throw new Error('Playlist không tồn tại')
+//         })
+
+//     await Song.aggregate()
+//         .lookup(lookupSongToUser)
+//         .lookup(lookupSongToPlaylist)
+//         .match({ playlistId: new objectId(playlistId) })
+//         .unwind(unwindUser)
+//         .unwind(unwindPlaylist)
+//         .project(columnSongReturn)
+//         .exec()
+//         .then((data) => {
+//             songs = data
+//         })
+//         .catch((error) => {
+//             console.log(error)
+//             res.status(400)
+//             throw new Error('Playlist không tồn tại')
+//         })
+
+//     const dataReturn = {
+//         playlist,
+//         songs,
+//     }
+
+//     res.status(200).json(dataReturn)
+// })
+
 // @desc    Get playlist of me
 // @route   GET /api/me/playlist/ofMe
 // @access  Private
-const getPlaylistOfMe = asyncHandler(async (req, res) => {
-    const playlists = await Playlist.aggregate()
-        .lookup(lookupPlaylistToCategory)
-        .lookup(lookupPlaylistToSong)
-        .lookup(lookupPlaylistToUser)
-        .unwind(unwindCategory)
-        .unwind(unwindUser)
-        .match({ userId: new objectId(req.user.id) })
-        .group({
-            _id: `$${unwindCategory}`,
-            data: {
-                $push: {
-                    id: '$_id',
-                    name: '$name',
-                    slug: '$slug',
-                    categoryId: '$categoryId',
-                    description: '$description',
-                    thumbnail: '$thumbnail',
-                    likeCount: '$likeCount',
-                    createdAt: '$createdAt',
-                    countSong: { $size: `$${unwindSong}` },
-                    userId: '$userId',
-                    artistName: `$${unwindUser}.artistName`,
-                },
-            },
-        })
-        .project({
-            _id: 0,
-            categoryId: '$_id._id',
-            categoryName: '$_id.name',
-            count: { $size: '$data' },
-            data: '$data',
-        })
-        .sort({ categoryName: 'asc' })
+// const getPlaylistOfMe = asyncHandler(async (req, res) => {
+//     const playlists = await Playlist.aggregate()
+//         .lookup(lookupPlaylistToCategory)
+//         .lookup(lookupPlaylistToSong)
+//         .lookup(lookupPlaylistToUser)
+//         .unwind(unwindCategory)
+//         .unwind(unwindUser)
+//         .match({ userId: new objectId(req.user.id) })
+//         .group({
+//             _id: `$${unwindCategory}`,
+//             data: {
+//                 $push: {
+//                     id: '$_id',
+//                     name: '$name',
+//                     slug: '$slug',
+//                     categoryId: '$categoryId',
+//                     description: '$description',
+//                     thumbnail: '$thumbnail',
+//                     likeCount: '$likeCount',
+//                     createdAt: '$createdAt',
+//                     countSong: { $size: `$${unwindSong}` },
+//                     userId: '$userId',
+//                     artistName: `$${unwindUser}.artistName`,
+//                 },
+//             },
+//         })
+//         .project({
+//             _id: 0,
+//             categoryId: '$_id._id',
+//             categoryName: '$_id.name',
+//             count: { $size: '$data' },
+//             data: '$data',
+//         })
+//         .sort({ categoryName: 'asc' })
 
-    res.status(200).json(playlists)
-})
+//     res.status(200).json(playlists)
+// })
 
 // @desc    Upload playlist
 // @route   POST /api/me/playlist
@@ -393,7 +702,7 @@ const addSong = asyncHandler(async (req, res) => {
         .match({ _id: new objectId(song._id) })
         .unwind(unwindUser)
         .unwind(unwindPlaylist)
-        .project(columnSongReturn)
+        .project(projectSong)
         .exec()
         .then((data) => {
             createdSong = data[0]
@@ -437,7 +746,7 @@ const updatePlaylist = asyncHandler(async (req, res) => {
     await Playlist.aggregate()
         .lookup(lookupPlaylistToSong)
         .match({ _id: new objectId(newPlaylist._id) })
-        .project(columnPlaylistReturn)
+        .project(projectPlaylist)
         .exec()
         .then((data) => {
             updatedPlaylist = data[0]
@@ -502,7 +811,7 @@ const updateSong = asyncHandler(async (req, res) => {
         .match({ _id: new objectId(newSong._id) })
         .unwind(unwindUser)
         .unwind(unwindPlaylist)
-        .project(columnSongReturn)
+        .project(projectSong)
         .exec()
         .then((data) => {
             updatedSong = data[0]
@@ -625,7 +934,7 @@ const deletePlaylist = asyncHandler(async (req, res) => {
 })
 
 // @desc    Delete song
-// @route   PUT /api/me/playlist/song/:sId
+// @route   PUT /api/me/song/:sId
 // @access  Private
 const deleteSong = asyncHandler(async (req, res) => {
     const songId = req.params.sId
@@ -655,12 +964,8 @@ const generateToken = (id) => {
 }
 
 export {
-    getMe,
     getPlaylists,
-    getPlaylistsForPage,
-    getPlaylistById,
-    getInfoAndSong,
-    getPlaylistOfMe,
+    getSongsByPlaylistId,
     addPlaylist,
     addSong,
     updatePlaylist,
