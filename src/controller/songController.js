@@ -261,6 +261,7 @@ const getSongAndPlaylistInfo = asyncHandler(async (req, res) => {
                 name: '$_id.name',
                 description: '$_id.description',
                 thumbnail: '$_id.thumbnail',
+                userId: '$_id.userId',
             },
             songs: '$data',
         },
